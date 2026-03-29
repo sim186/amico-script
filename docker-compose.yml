@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  audioscript:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Edit frontend/index.html and refresh — no rebuild needed
+      - ./frontend:/app/frontend:ro
+      # Persist downloaded Whisper/pyannote model weights across restarts
+      - whisper_models:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  whisper_models:
