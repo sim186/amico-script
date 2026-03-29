@@ -13,275 +13,318 @@
         extend: {
           fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
           colors: {
-            brand: { DEFAULT: '#6c63ff', hover: '#7d75ff', light: '#ede9ff' },
+            brand: { DEFAULT: '#6c63ff', hover: '#7d75ff', muted: '#ede9ff' },
           },
         }
       }
     }
   </script>
   <style>
-    .screen { display: none; }
-    .screen.active { display: block; }
-    .model-card.selected { border-color: #6c63ff; background-color: #ede9ff; }
-    .segment.active { background-color: #ede9ff; border-left-color: #6c63ff; }
-    .segment:hover { background-color: #f5f3ff; }
-    mark { background-color: #fef08a; border-radius: 2px; padding: 0 1px; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-    /* speaker color pills */
-    .spk-0 { background:#6c63ff; } .spk-1 { background:#f59e0b; }
-    .spk-2 { background:#10b981; } .spk-3 { background:#f472b6; }
-    .spk-4 { background:#60a5fa; } .spk-5 { background:#fb7185; }
-    .spk-6 { background:#a78bfa; } .spk-7 { background:#fbbf24; }
-    .spk-text-0 { color:#6c63ff; } .spk-text-1 { color:#d97706; }
-    .spk-text-2 { color:#059669; } .spk-text-3 { color:#db2777; }
-    .spk-text-4 { color:#2563eb; } .spk-text-5 { color:#e11d48; }
-    .spk-text-6 { color:#7c3aed; } .spk-text-7 { color:#d97706; }
+    /* tab panels */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    /* sidebar panels */
+    .sidebar-panel { display: none; }
+    .sidebar-panel.active { display: flex; flex-direction: column; gap: 1rem; }
+    /* model cards */
+    .model-card.selected { border-color: #6c63ff; background: #ede9ff; }
+    .model-card:focus { outline: 2px solid #6c63ff; outline-offset: 1px; }
+    /* segments */
+    .segment { border-left: 3px solid #e2e8f0; transition: background .12s, border-color .12s; }
+    .segment:hover { background: #f8f7ff; border-left-color: #a5b4fc; }
+    .segment.active { background: #ede9ff; border-left-color: #6c63ff; }
+    mark { background: #fef08a; border-radius: 2px; padding: 0 1px; }
+    /* speaker colors */
+    .spk-0{background:#6c63ff}.spk-1{background:#f59e0b}.spk-2{background:#10b981}
+    .spk-3{background:#f472b6}.spk-4{background:#60a5fa}.spk-5{background:#fb7185}
+    .spk-6{background:#a78bfa}.spk-7{background:#fbbf24}
+    .spk-text-0{color:#6c63ff}.spk-text-1{color:#d97706}.spk-text-2{color:#059669}
+    .spk-text-3{color:#db2777}.spk-text-4{color:#2563eb}.spk-text-5{color:#e11d48}
+    .spk-text-6{color:#7c3aed}.spk-text-7{color:#d97706}
+    ::-webkit-scrollbar{width:5px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
   </style>
 </head>
-<body class="h-full bg-slate-50 font-sans text-slate-800 antialiased">
+<body class="h-full bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden">
 
-<!-- =====================================================================
-     SCREEN 1 — UPLOAD & CONFIGURE
-====================================================================== -->
-<div id="screen-upload" class="screen active min-h-screen">
-  <div class="max-w-3xl mx-auto px-4 py-10">
+<!--
+  Layout: fixed sidebar (left) + main panel (right)
+  Main panel: tab bar + tab content
+-->
+<div class="flex h-full">
 
-    <!-- Header -->
-    <div class="mb-10 text-center">
-      <h1 class="text-3xl font-bold text-slate-900">AmicoScript</h1>
-      <p class="mt-1 text-slate-500 text-sm">Local audio transcription — nothing leaves your machine</p>
+  <!-- ===================================================================
+       SIDEBAR
+  =================================================================== -->
+  <aside class="w-72 shrink-0 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
+
+    <!-- Logo -->
+    <div class="px-5 py-5 border-b border-slate-100">
+      <h1 class="text-lg font-bold text-slate-900 tracking-tight">AmicoScript</h1>
+      <p class="text-xs text-slate-400 mt-0.5">Local audio transcription</p>
     </div>
 
-    <!-- Drop zone -->
-    <div id="drop-zone"
-         role="button" tabindex="0" aria-label="Upload audio file"
-         class="relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-8 py-14 text-center cursor-pointer transition hover:border-brand hover:bg-brand-light/30 focus:outline-none focus:ring-2 focus:ring-brand">
-      <input type="file" id="file-input" accept=".mp3,.wav,.m4a,.ogg,.flac,.mp4" class="hidden" aria-hidden="true" />
-      <svg id="drop-icon" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6.5A2.5 2.5 0 0114 4h0a2.5 2.5 0 012.5 2.5v1m-10 5l3-3 3 3m-3-3v8m5.5 2H6.5A2.5 2.5 0 014 17.5v0A2.5 2.5 0 016.5 15h11A2.5 2.5 0 0120 17.5v0A2.5 2.5 0 0117.5 20H12"/>
-      </svg>
-      <div>
-        <p class="font-medium text-slate-700">Drop audio here or <span class="text-brand underline">browse</span></p>
-        <p class="mt-1 text-xs text-slate-400">MP3, WAV, M4A, OGG, FLAC — up to any size</p>
-      </div>
-      <div id="file-info" class="hidden mt-2 flex items-center gap-2 text-sm text-slate-600 bg-slate-100 rounded-lg px-4 py-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-brand shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6.5A2.5 2.5 0 0114 4h0a2.5 2.5 0 012.5 2.5V10"/></svg>
-        <span id="file-name" class="font-medium truncate max-w-xs"></span>
-        <span id="file-size" class="text-slate-400 shrink-0"></span>
-      </div>
-    </div>
+    <!-- Sidebar content (context-aware) -->
+    <div class="flex-1 overflow-y-auto px-4 py-4">
 
-    <!-- Config -->
-    <div class="mt-8 space-y-6">
+      <!-- SIDEBAR: Transcribe tab -->
+      <div id="sidebar-transcribe" class="sidebar-panel active">
 
-      <!-- Model selector -->
-      <div>
-        <h2 class="text-sm font-semibold text-slate-700 mb-3">Model</h2>
-        <div id="model-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="Whisper model"></div>
-      </div>
-
-      <!-- Language -->
-      <div>
-        <label for="language-select" class="text-sm font-semibold text-slate-700 block mb-2">Language</label>
-        <select id="language-select"
-                class="w-full sm:w-64 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand">
-          <option value="">Auto-detect</option>
-          <option value="en">English</option>
-          <option value="it">Italian</option>
-          <option value="es">Spanish</option>
-          <option value="fr">French</option>
-          <option value="de">German</option>
-          <option value="pt">Portuguese</option>
-          <option value="nl">Dutch</option>
-          <option value="pl">Polish</option>
-          <option value="ru">Russian</option>
-          <option value="ja">Japanese</option>
-          <option value="zh">Chinese</option>
-          <option value="ko">Korean</option>
-          <option value="ar">Arabic</option>
-          <option value="tr">Turkish</option>
-          <option value="sv">Swedish</option>
-          <option value="da">Danish</option>
-          <option value="fi">Finnish</option>
-          <option value="no">Norwegian</option>
-          <option value="uk">Ukrainian</option>
-        </select>
-      </div>
-
-      <!-- Diarization -->
-      <div>
-        <div class="flex items-center gap-3">
-          <button id="diarize-toggle"
-                  role="switch" aria-checked="false" aria-label="Enable speaker diarization"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-200 transition focus:outline-none focus:ring-2 focus:ring-brand">
-            <span class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow translate-x-0 transition-transform duration-200"></span>
-          </button>
-          <span class="text-sm font-medium text-slate-700">Speaker diarization</span>
-          <span class="text-xs text-slate-400">(requires HuggingFace token)</span>
+        <!-- Model -->
+        <div>
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model</h2>
+          <div id="model-grid" role="radiogroup" aria-label="Whisper model" class="space-y-1.5"></div>
         </div>
 
-        <div id="hf-section" class="hidden mt-4 space-y-3 pl-1">
-          <div>
-            <label for="hf-token-input" class="block text-sm font-medium text-slate-600 mb-1">HuggingFace Token</label>
-            <div class="relative w-full sm:w-96">
-              <input type="password" id="hf-token-input" placeholder="hf_…"
-                     autocomplete="off"
-                     class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-10 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-              <button id="hf-eye-btn" type="button" aria-label="Toggle token visibility"
-                      class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600">
-                <svg id="hf-eye-open" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-                <svg id="hf-eye-closed" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M3 3l18 18"/>
-                </svg>
-              </button>
+        <!-- Language -->
+        <div>
+          <label for="language-select" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Language</label>
+          <select id="language-select"
+                  class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="it">Italian</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="pt">Portuguese</option>
+            <option value="nl">Dutch</option>
+            <option value="pl">Polish</option>
+            <option value="ru">Russian</option>
+            <option value="ja">Japanese</option>
+            <option value="zh">Chinese</option>
+            <option value="ko">Korean</option>
+            <option value="ar">Arabic</option>
+            <option value="tr">Turkish</option>
+            <option value="sv">Swedish</option>
+            <option value="da">Danish</option>
+            <option value="fi">Finnish</option>
+            <option value="no">Norwegian</option>
+            <option value="uk">Ukrainian</option>
+          </select>
+        </div>
+
+        <!-- Diarization -->
+        <div>
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Speakers</h2>
+          <div class="flex items-center gap-2 mb-3">
+            <button id="diarize-toggle"
+                    role="switch" aria-checked="false" aria-label="Enable speaker diarization"
+                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-200 transition focus:outline-none focus:ring-2 focus:ring-brand">
+              <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow translate-x-0 transition-transform duration-200"></span>
+            </button>
+            <span class="text-sm text-slate-700">Speaker diarization</span>
+          </div>
+
+          <div id="hf-section" class="hidden space-y-3">
+            <div>
+              <label for="hf-token-input" class="block text-xs text-slate-500 mb-1">HuggingFace Token</label>
+              <div class="relative">
+                <input type="password" id="hf-token-input" placeholder="hf_…" autocomplete="off"
+                       class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                <button id="hf-eye-btn" type="button" aria-label="Toggle token visibility"
+                        class="absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400 hover:text-slate-600">
+                  <svg id="hf-eye-open" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                  <svg id="hf-eye-closed" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M3 3l18 18"/>
+                  </svg>
+                </button>
+              </div>
+              <p class="mt-1 text-xs text-slate-400">
+                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" class="text-brand hover:underline">Get token ↗</a>
+                ·
+                <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener" class="text-brand hover:underline">Accept license ↗</a>
+              </p>
             </div>
-            <p class="mt-1 text-xs text-slate-400">
-              <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" class="text-brand hover:underline">Get a token ↗</a>
-              and accept the
-              <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener" class="text-brand hover:underline">pyannote model license ↗</a>
-            </p>
-          </div>
-          <div>
-            <label for="num-speakers-input" class="block text-sm font-medium text-slate-600 mb-1">Number of speakers <span class="text-slate-400 font-normal">(optional)</span></label>
-            <input type="number" id="num-speakers-input" min="1" max="20" placeholder="Auto"
-                   class="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            <div>
+              <label for="num-speakers-input" class="block text-xs text-slate-500 mb-1">Number of speakers <span class="text-slate-400">(optional)</span></label>
+              <input type="number" id="num-speakers-input" min="1" max="20" placeholder="Auto"
+                     class="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Start button -->
-    <div class="mt-8">
-      <button id="start-btn" disabled
-              class="w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white shadow transition
-                     hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2
-                     disabled:opacity-40 disabled:cursor-not-allowed">
+      </div><!-- /sidebar-transcribe -->
+
+      <!-- SIDEBAR: Transcript tab -->
+      <div id="sidebar-transcript" class="sidebar-panel">
+
+        <!-- Job meta -->
+        <div id="result-meta-sidebar" class="space-y-2">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">File info</h2>
+          <div id="meta-items" class="space-y-1.5"></div>
+        </div>
+
+        <!-- Speaker legend -->
+        <div id="speaker-section" class="hidden">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Speakers</h2>
+          <div id="speaker-list" role="list" class="space-y-1.5"></div>
+        </div>
+
+        <!-- Audio player -->
+        <div id="player-section">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Player</h2>
+          <audio id="audio-player" controls class="w-full rounded-lg" aria-label="Audio playback"></audio>
+          <div class="flex items-center gap-2 mt-2">
+            <label for="speed-select" class="text-xs text-slate-500 shrink-0">Speed</label>
+            <select id="speed-select" aria-label="Playback speed"
+                    class="text-xs rounded border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand">
+              <option value="0.5">0.5×</option>
+              <option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.25">1.25×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+        </div>
+
+      </div><!-- /sidebar-transcript -->
+
+    </div><!-- /sidebar scroll -->
+  </aside>
+
+  <!-- ===================================================================
+       MAIN PANEL
+  =================================================================== -->
+  <div class="flex-1 flex flex-col min-w-0 h-full">
+
+    <!-- Tab bar -->
+    <div class="bg-white border-b border-slate-200 px-6 flex items-end gap-1 shrink-0">
+      <button id="tab-btn-transcribe"
+              class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-brand text-brand -mb-px focus:outline-none"
+              aria-selected="true" role="tab" aria-controls="tab-transcribe">
         Transcribe
       </button>
-      <div id="error-msg" class="hidden mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"></div>
-    </div>
-
-  </div>
-</div>
-
-
-<!-- =====================================================================
-     SCREEN 2 — PROCESSING
-====================================================================== -->
-<div id="screen-processing" class="screen min-h-screen flex items-center justify-center" aria-live="polite">
-  <div class="w-full max-w-md mx-auto px-6 py-12">
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
-
-      <!-- Spinner -->
-      <div class="flex justify-center mb-6">
-        <svg class="animate-spin w-10 h-10 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-        </svg>
-      </div>
-
-      <p id="proc-filename" class="text-sm text-slate-400 mb-1 truncate"></p>
-      <p id="proc-message" class="font-semibold text-slate-700 mb-6">Preparing…</p>
-
-      <!-- Progress bar -->
-      <div class="w-full bg-slate-100 rounded-full h-2 mb-2" role="progressbar"
-           aria-label="Transcription progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
-           id="progress-bar-container">
-        <div id="progress-bar" class="bg-brand h-2 rounded-full transition-all duration-300" style="width:0%"></div>
-      </div>
-      <p id="proc-percent" class="text-xs text-slate-400 mb-8">0%</p>
-
-      <button id="cancel-btn"
-              class="text-sm text-slate-400 hover:text-red-500 transition focus:outline-none focus:ring-2 focus:ring-red-400 rounded px-2 py-1"
-              aria-label="Cancel transcription">
-        Cancel
+      <button id="tab-btn-transcript"
+              class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 -mb-px transition focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-selected="false" role="tab" aria-controls="tab-transcript" disabled>
+        Transcript
       </button>
-    </div>
-  </div>
-</div>
-
-
-<!-- =====================================================================
-     SCREEN 3 — RESULTS
-====================================================================== -->
-<div id="screen-results" class="screen min-h-screen flex flex-col">
-
-  <!-- Top bar -->
-  <header class="sticky top-0 z-20 bg-white border-b border-slate-100 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-      <span class="font-bold text-slate-900 text-base mr-2">AmicoScript</span>
-      <div id="result-meta" class="flex flex-wrap gap-2 text-xs text-slate-500 flex-1"></div>
-      <div class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs text-slate-400 font-medium">Export:</span>
-        <button data-fmt="json" class="export-btn px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-brand">JSON</button>
-        <button data-fmt="srt"  class="export-btn px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-brand">SRT</button>
-        <button data-fmt="txt"  class="export-btn px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-brand">TXT</button>
-        <button data-fmt="md"   class="export-btn px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-brand">MD</button>
+      <!-- Export buttons (only visible on transcript tab) -->
+      <div id="export-bar" class="hidden ml-auto flex items-center gap-1.5 pb-2">
+        <span class="text-xs text-slate-400 mr-1">Export</span>
+        <button data-fmt="json" class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">JSON</button>
+        <button data-fmt="srt"  class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">SRT</button>
+        <button data-fmt="txt"  class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">TXT</button>
+        <button data-fmt="md"   class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">MD</button>
         <button id="new-btn"
-                class="ml-2 px-3 py-1 rounded-lg bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1"
-                aria-label="Start new transcription">
+                class="ml-2 px-3 py-1 rounded-md bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1">
           + New
         </button>
       </div>
     </div>
-  </header>
 
-  <!-- Body -->
-  <div class="flex-1 max-w-7xl mx-auto w-full px-4 py-6 flex gap-6">
+    <!-- Tab panels -->
+    <div class="flex-1 min-h-0 flex flex-col">
 
-    <!-- Sidebar -->
-    <aside class="w-64 shrink-0 space-y-4">
+      <!-- ---------------------------------------------------------------
+           TAB: TRANSCRIBE
+      --------------------------------------------------------------- -->
+      <div id="tab-transcribe" class="tab-panel active overflow-y-auto px-8 py-8" role="tabpanel">
 
-      <!-- Speaker legend -->
-      <div id="speaker-legend" class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Speakers</h3>
-        <div id="speaker-list" role="list" class="space-y-2"></div>
-      </div>
+        <!-- Upload state -->
+        <div id="upload-state">
+          <!-- Drop zone -->
+          <div id="drop-zone"
+               role="button" tabindex="0" aria-label="Upload audio file"
+               class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-8 py-14 text-center cursor-pointer transition hover:border-brand hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand">
+            <input type="file" id="file-input" accept=".mp3,.wav,.m4a,.ogg,.flac,.mp4" class="hidden" aria-hidden="true" />
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            <div>
+              <p class="font-medium text-slate-700">Drop audio here or <span class="text-brand">browse</span></p>
+              <p class="mt-1 text-xs text-slate-400">MP3 · WAV · M4A · OGG · FLAC</p>
+            </div>
+          </div>
 
-      <!-- Audio player -->
-      <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4 space-y-3">
-        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Player</h3>
-        <audio id="audio-player" controls class="w-full rounded-lg" aria-label="Audio playback"></audio>
-        <div class="flex items-center gap-2">
-          <label for="speed-select" class="text-xs text-slate-500 shrink-0">Speed</label>
-          <select id="speed-select" aria-label="Playback speed"
-                  class="text-xs rounded border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand">
-            <option value="0.5">0.5×</option>
-            <option value="0.75">0.75×</option>
-            <option value="1" selected>1×</option>
-            <option value="1.25">1.25×</option>
-            <option value="1.5">1.5×</option>
-            <option value="2">2×</option>
-          </select>
+          <!-- Selected file -->
+          <div id="file-info" class="hidden mt-4 flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-brand shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6.5A2.5 2.5 0 0114 4h0a2.5 2.5 0 012.5 2.5V10"/>
+            </svg>
+            <span id="file-name" class="text-sm font-medium text-slate-700 truncate flex-1"></span>
+            <span id="file-size" class="text-xs text-slate-400 shrink-0"></span>
+            <button id="clear-file-btn" aria-label="Remove file"
+                    class="text-slate-300 hover:text-red-400 transition focus:outline-none ml-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Error -->
+          <div id="error-msg" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"></div>
+
+          <!-- Start button -->
+          <button id="start-btn" disabled
+                  class="mt-6 w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white shadow-sm transition
+                         hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+            Start transcription
+          </button>
         </div>
-      </div>
 
-    </aside>
+        <!-- Processing state (replaces upload while running) -->
+        <div id="processing-state" class="hidden" aria-live="polite">
+          <div class="bg-white rounded-2xl border border-slate-200 px-8 py-10 text-center max-w-md mx-auto">
+            <svg class="animate-spin w-9 h-9 text-brand mx-auto mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+            <p id="proc-filename" class="text-xs text-slate-400 mb-1 truncate"></p>
+            <p id="proc-message" class="font-semibold text-slate-800 mb-5">Preparing…</p>
+            <div class="w-full bg-slate-100 rounded-full h-2 mb-1.5"
+                 role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                 id="progress-bar-wrap">
+              <div id="progress-bar" class="bg-brand h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+            </div>
+            <p id="proc-percent" class="text-xs text-slate-400 mb-6">0%</p>
+            <button id="cancel-btn"
+                    class="text-xs text-slate-400 hover:text-red-500 transition focus:outline-none focus:ring-2 focus:ring-red-400 rounded px-2 py-1"
+                    aria-label="Cancel transcription">
+              Cancel
+            </button>
+          </div>
+        </div>
 
-    <!-- Transcript panel -->
-    <main class="flex-1 min-w-0 flex flex-col gap-4">
+      </div><!-- /tab-transcribe -->
 
-      <!-- Search -->
-      <div class="relative">
-        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
-        </svg>
-        <input id="search-input" type="search" placeholder="Search transcript…" aria-label="Search transcript"
-               class="w-full pl-10 pr-24 py-2.5 rounded-xl border border-slate-200 bg-white text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        <span id="search-count" class="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400"></span>
-      </div>
+      <!-- ---------------------------------------------------------------
+           TAB: TRANSCRIPT
+      --------------------------------------------------------------- -->
+      <div id="tab-transcript" class="tab-panel overflow-hidden" role="tabpanel">
+        <div class="flex flex-col h-full">
 
-      <!-- Segments -->
-      <div id="segments-list" role="list" aria-label="Transcript segments" class="space-y-1.5"></div>
+          <!-- Search bar -->
+          <div class="px-6 py-3 bg-white border-b border-slate-100 shrink-0">
+            <div class="relative max-w-lg">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+              </svg>
+              <input id="search-input" type="search" placeholder="Search transcript…" aria-label="Search transcript"
+                     class="w-full pl-10 pr-24 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition" />
+              <span id="search-count" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"></span>
+            </div>
+          </div>
 
-    </main>
-  </div>
-</div>
+          <!-- Segments -->
+          <div class="flex-1 overflow-y-auto px-6 py-4">
+            <div id="segments-list" role="list" aria-label="Transcript segments" class="space-y-1.5"></div>
+          </div>
+
+        </div>
+      </div><!-- /tab-transcript -->
+
+    </div><!-- /tab panels -->
+  </div><!-- /main panel -->
+
+</div><!-- /layout -->
 
 
 <script>
@@ -289,7 +332,7 @@
 // State
 // =========================================================================
 const state = {
-  screen: 'upload',
+  activeTab: 'transcribe',
   selectedFile: null,
   selectedModel: 'small',
   selectedLanguage: '',
@@ -312,27 +355,46 @@ const state = {
 };
 
 // =========================================================================
-// Screen transitions
+// Tabs
 // =========================================================================
-function showScreen(name) {
-  document.querySelectorAll('.screen').forEach(el => {
-    const active = el.id === `screen-${name}`;
-    el.classList.toggle('active', active);
-    el.setAttribute('aria-hidden', String(!active));
+function switchTab(name) {
+  state.activeTab = name;
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const active = btn.id === `tab-btn-${name}`;
+    btn.setAttribute('aria-selected', String(active));
+    btn.classList.toggle('border-brand', active);
+    btn.classList.toggle('text-brand', active);
+    btn.classList.toggle('border-transparent', !active);
+    btn.classList.toggle('text-slate-500', !active);
   });
-  state.screen = name;
+
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === `tab-${name}`);
+  });
+
+  document.querySelectorAll('.sidebar-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === `sidebar-${name}`);
+  });
+
+  document.getElementById('export-bar').classList.toggle('hidden', name !== 'transcript');
 }
+
+document.getElementById('tab-btn-transcribe').addEventListener('click', () => switchTab('transcribe'));
+document.getElementById('tab-btn-transcript').addEventListener('click', () => {
+  if (!document.getElementById('tab-btn-transcript').disabled) switchTab('transcript');
+});
 
 // =========================================================================
 // Model cards
 // =========================================================================
 const MODELS = [
-  { id: 'tiny',     name: 'Tiny',     params: '~39M',  ram: '~1 GB',  speed: 5, note: 'Fastest' },
-  { id: 'base',     name: 'Base',     params: '~74M',  ram: '~1 GB',  speed: 4, note: 'Fast' },
-  { id: 'small',    name: 'Small',    params: '~244M', ram: '~2 GB',  speed: 3, note: 'Balanced' },
-  { id: 'medium',   name: 'Medium',   params: '~769M', ram: '~5 GB',  speed: 2, note: 'Accurate' },
-  { id: 'large-v2', name: 'Large v2', params: '~1.5B', ram: '~10 GB', speed: 1, note: 'Best' },
-  { id: 'large-v3', name: 'Large v3', params: '~1.5B', ram: '~10 GB', speed: 1, note: 'Best+' },
+  { id: 'tiny',     name: 'Tiny',     params: '~39M',  speed: 5, note: 'Fastest · lowest accuracy' },
+  { id: 'base',     name: 'Base',     params: '~74M',  speed: 4, note: 'Fast' },
+  { id: 'small',    name: 'Small',    params: '~244M', speed: 3, note: 'Balanced' },
+  { id: 'medium',   name: 'Medium',   params: '~769M', speed: 2, note: 'High accuracy' },
+  { id: 'large-v2', name: 'Large v2', params: '~1.5B', speed: 1, note: 'Best accuracy' },
+  { id: 'large-v3', name: 'Large v3', params: '~1.5B', speed: 1, note: 'Best accuracy+' },
 ];
 
 function renderModelGrid() {
@@ -344,20 +406,23 @@ function renderModelGrid() {
     btn.dataset.model = m.id;
     btn.setAttribute('role', 'radio');
     btn.setAttribute('aria-checked', String(m.id === state.selectedModel));
-    btn.className = 'model-card rounded-xl border-2 border-slate-200 bg-white p-4 text-left transition hover:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand';
+    btn.className = 'model-card w-full flex items-center gap-3 rounded-lg border-2 border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-brand/40 focus:outline-none';
     if (m.id === state.selectedModel) btn.classList.add('selected');
 
-    const speedDots = Array.from({ length: 5 }, (_, i) => {
-      const filled = i < m.speed;
-      return `<span class="inline-block w-1.5 h-1.5 rounded-full ${filled ? 'bg-brand' : 'bg-slate-200'}"></span>`;
-    }).join('');
+    const dots = Array.from({ length: 5 }, (_, i) =>
+      `<span class="inline-block w-1.5 h-1.5 rounded-full ${i < m.speed ? 'bg-brand' : 'bg-slate-200'}"></span>`
+    ).join('');
 
     btn.innerHTML = `
-      <div class="font-semibold text-slate-800 text-sm">${m.name}</div>
-      <div class="text-xs text-slate-400 mt-0.5">${m.params} · ${m.ram}</div>
-      <div class="flex items-center gap-0.5 mt-2">${speedDots}</div>
-      <div class="text-xs text-slate-500 mt-1">${m.note}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-semibold text-slate-800">${m.name}</span>
+          <span class="text-xs text-slate-400">${m.params}</span>
+        </div>
+        <div class="flex items-center gap-0.5 mt-1">${dots}</div>
+      </div>
     `;
+    btn.title = m.note;
     btn.addEventListener('click', () => selectModel(m.id));
     grid.appendChild(btn);
   });
@@ -366,10 +431,10 @@ function renderModelGrid() {
 function selectModel(id) {
   state.selectedModel = id;
   localStorage.setItem('selectedModel', id);
-  document.querySelectorAll('.model-card').forEach(card => {
-    const isSelected = card.dataset.model === id;
-    card.classList.toggle('selected', isSelected);
-    card.setAttribute('aria-checked', String(isSelected));
+  document.querySelectorAll('.model-card').forEach(c => {
+    const sel = c.dataset.model === id;
+    c.classList.toggle('selected', sel);
+    c.setAttribute('aria-checked', String(sel));
   });
 }
 
@@ -384,15 +449,23 @@ function initDropZone() {
   zone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
   input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); });
 
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-brand', 'bg-brand-light/30'); });
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('border-brand', 'bg-brand-muted/20');
+  });
   zone.addEventListener('dragleave', e => {
-    if (!zone.contains(e.relatedTarget)) zone.classList.remove('border-brand', 'bg-brand-light/30');
+    if (!zone.contains(e.relatedTarget))
+      zone.classList.remove('border-brand', 'bg-brand-muted/20');
   });
   zone.addEventListener('drop', e => {
     e.preventDefault();
-    zone.classList.remove('border-brand', 'bg-brand-light/30');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    zone.classList.remove('border-brand', 'bg-brand-muted/20');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  document.getElementById('clear-file-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    clearFile();
   });
 }
 
@@ -404,16 +477,22 @@ function handleFile(file) {
   }
   hideError();
   state.selectedFile = file;
-  const info = document.getElementById('file-info');
   document.getElementById('file-name').textContent = file.name;
-  document.getElementById('file-size').textContent = formatBytes(file.size);
-  info.classList.remove('hidden');
+  document.getElementById('file-size').textContent = fmtBytes(file.size);
+  document.getElementById('file-info').classList.remove('hidden');
   document.getElementById('start-btn').disabled = false;
 }
 
-function formatBytes(bytes) {
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+function clearFile() {
+  state.selectedFile = null;
+  document.getElementById('file-info').classList.add('hidden');
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('file-input').value = '';
+  hideError();
+}
+
+function fmtBytes(b) {
+  return b < 1048576 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB';
 }
 
 // =========================================================================
@@ -424,7 +503,7 @@ function initDiarizeToggle() {
   btn.addEventListener('click', () => {
     state.diarize = !state.diarize;
     btn.setAttribute('aria-checked', String(state.diarize));
-    btn.querySelector('span').style.transform = state.diarize ? 'translateX(20px)' : 'translateX(0)';
+    btn.querySelector('span').style.transform = state.diarize ? 'translateX(16px)' : 'translateX(0)';
     btn.classList.toggle('bg-brand', state.diarize);
     btn.classList.toggle('bg-slate-200', !state.diarize);
     document.getElementById('hf-section').classList.toggle('hidden', !state.diarize);
@@ -433,15 +512,15 @@ function initDiarizeToggle() {
 
   document.getElementById('hf-token-input').addEventListener('input', e => {
     state.hfToken = e.target.value;
-    localStorage.setItem('hfToken', state.hfToken);
+    localStorage.setItem('hfToken', e.target.value);
   });
 
   document.getElementById('hf-eye-btn').addEventListener('click', () => {
     const inp = document.getElementById('hf-token-input');
-    const isPass = inp.type === 'password';
-    inp.type = isPass ? 'text' : 'password';
-    document.getElementById('hf-eye-open').classList.toggle('hidden', isPass);
-    document.getElementById('hf-eye-closed').classList.toggle('hidden', !isPass);
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    document.getElementById('hf-eye-open').classList.toggle('hidden', show);
+    document.getElementById('hf-eye-closed').classList.toggle('hidden', !show);
   });
 
   document.getElementById('num-speakers-input').addEventListener('input', e => {
@@ -464,6 +543,8 @@ async function startTranscription() {
   fd.append('hf_token', state.hfToken);
   fd.append('num_speakers', state.numSpeakers);
 
+  setProcessing(true);
+
   try {
     const res = await fetch('/api/transcribe', { method: 'POST', body: fd });
     if (!res.ok) {
@@ -472,12 +553,17 @@ async function startTranscription() {
     }
     const { job_id } = await res.json();
     state.jobId = job_id;
-    showScreen('processing');
     document.getElementById('proc-filename').textContent = state.selectedFile.name;
     connectSSE(job_id);
   } catch (err) {
+    setProcessing(false);
     showError(`Upload failed: ${err.message}`);
   }
+}
+
+function setProcessing(active) {
+  document.getElementById('upload-state').classList.toggle('hidden', active);
+  document.getElementById('processing-state').classList.toggle('hidden', !active);
 }
 
 // =========================================================================
@@ -505,11 +591,11 @@ function connectSSE(jobId) {
       loadResult(jobId);
     } else if (data.status === 'error') {
       es.close();
-      showScreen('upload');
+      setProcessing(false);
       showError(`Transcription error: ${data.message}`);
     } else if (data.status === 'cancelled') {
       es.close();
-      showScreen('upload');
+      setProcessing(false);
     }
   };
 
@@ -526,18 +612,17 @@ function updateProcessingUI() {
   document.getElementById('proc-message').textContent = state.jobMessage || 'Processing…';
   document.getElementById('progress-bar').style.width = `${pct}%`;
   document.getElementById('proc-percent').textContent = `${pct}%`;
-  const bar = document.getElementById('progress-bar-container');
-  bar.setAttribute('aria-valuenow', String(pct));
+  document.getElementById('progress-bar-wrap').setAttribute('aria-valuenow', String(pct));
 }
 
 // =========================================================================
 // Cancel
 // =========================================================================
 async function cancelJob() {
-  if (!state.jobId) return;
   state.eventSource?.close();
-  await fetch(`/api/jobs/${state.jobId}/cancel`, { method: 'POST' }).catch(() => {});
-  showScreen('upload');
+  if (state.jobId) await fetch(`/api/jobs/${state.jobId}/cancel`, { method: 'POST' }).catch(() => {});
+  setProcessing(false);
+  state.jobId = null;
 }
 
 // =========================================================================
@@ -561,9 +646,14 @@ async function loadResult(jobId) {
     state.searchQuery = '';
 
     renderResults();
-    showScreen('results');
+    setProcessing(false);
+
+    // enable transcript tab and switch to it
+    const transcriptBtn = document.getElementById('tab-btn-transcript');
+    transcriptBtn.disabled = false;
+    switchTab('transcript');
   } catch (err) {
-    showScreen('upload');
+    setProcessing(false);
     showError(`Failed to load result: ${err.message}`);
   }
 }
@@ -571,24 +661,33 @@ async function loadResult(jobId) {
 // =========================================================================
 // Results rendering
 // =========================================================================
+function fmtDur(s) {
+  const t = Math.floor(s);
+  return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+}
+
 function renderResults() {
   const r = state.result;
 
-  // Meta bar
-  const lang = r.language ? r.language.toUpperCase() : '?';
-  const dur = formatDuration(r.duration);
-  const metaEl = document.getElementById('result-meta');
-  metaEl.innerHTML = [
-    `<span class="bg-slate-100 rounded px-2 py-0.5">${lang}</span>`,
-    `<span class="bg-slate-100 rounded px-2 py-0.5">${dur}</span>`,
-    `<span class="bg-slate-100 rounded px-2 py-0.5">${r.num_segments} segments</span>`,
-    r.speakers.length ? `<span class="bg-slate-100 rounded px-2 py-0.5">${r.speakers.length} speakers</span>` : '',
-  ].join('');
+  // Meta sidebar
+  const items = document.getElementById('meta-items');
+  const metas = [
+    ['Language', r.language ? r.language.toUpperCase() : '?'],
+    ['Duration', fmtDur(r.duration)],
+    ['Segments', String(r.num_segments)],
+  ];
+  if (r.speakers.length) metas.push(['Speakers', String(r.speakers.length)]);
+  items.innerHTML = metas.map(([k,v]) => `
+    <div class="flex justify-between text-sm">
+      <span class="text-slate-500">${k}</span>
+      <span class="font-medium text-slate-700">${v}</span>
+    </div>
+  `).join('');
 
   // Speaker legend
   renderSpeakerLegend(r.speakers);
 
-  // Audio player
+  // Audio
   const player = document.getElementById('audio-player');
   player.src = state.audioUrl;
 
@@ -598,93 +697,86 @@ function renderResults() {
 }
 
 function renderSpeakerLegend(speakers) {
+  const section = document.getElementById('speaker-section');
   const list = document.getElementById('speaker-list');
+  if (!speakers.length) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
   list.innerHTML = '';
-  if (!speakers.length) {
-    document.getElementById('speaker-legend').classList.add('hidden');
-    return;
-  }
-  document.getElementById('speaker-legend').classList.remove('hidden');
   speakers.forEach((spk, i) => {
     const idx = i % 8;
-    const li = document.createElement('div');
-    li.setAttribute('role', 'listitem');
-    li.className = 'flex items-center gap-2 cursor-pointer select-none group';
-    li.innerHTML = `
-      <span class="w-3 h-3 rounded-full shrink-0 spk-${idx}"></span>
-      <span class="text-sm text-slate-600 group-hover:text-slate-900 transition">${spk}</span>
+    const div = document.createElement('div');
+    div.setAttribute('role', 'listitem');
+    div.className = 'flex items-center gap-2 cursor-pointer select-none group rounded-lg px-2 py-1.5 hover:bg-slate-50 transition';
+    div.innerHTML = `
+      <span class="w-2.5 h-2.5 rounded-full shrink-0 spk-${idx}"></span>
+      <span class="text-sm text-slate-600 group-hover:text-slate-900 transition flex-1">${escHtml(spk)}</span>
+      <span id="filter-dot-${idx}" class="hidden w-1.5 h-1.5 rounded-full bg-brand shrink-0"></span>
     `;
-    li.addEventListener('click', () => toggleSpeakerFilter(spk));
-    list.appendChild(li);
+    div.addEventListener('click', () => toggleSpeakerFilter(spk, idx));
+    list.appendChild(div);
   });
 }
 
-function toggleSpeakerFilter(spk) {
-  if (state.activeSpeakerFilter === spk) {
-    state.activeSpeakerFilter = null;
-  } else {
-    state.activeSpeakerFilter = spk;
+function toggleSpeakerFilter(spk, idx) {
+  state.activeSpeakerFilter = state.activeSpeakerFilter === spk ? null : spk;
+  // update indicator dots
+  document.querySelectorAll('[id^="filter-dot-"]').forEach(d => d.classList.add('hidden'));
+  if (state.activeSpeakerFilter) {
+    document.getElementById(`filter-dot-${idx}`)?.classList.remove('hidden');
   }
   applyFilters();
 }
 
 function applyFilters() {
   let segs = state.result.segments;
-  if (state.activeSpeakerFilter) {
-    segs = segs.filter(s => s.speaker === state.activeSpeakerFilter);
-  }
+  if (state.activeSpeakerFilter) segs = segs.filter(s => s.speaker === state.activeSpeakerFilter);
   const q = state.searchQuery.toLowerCase().trim();
-  if (q) {
-    segs = segs.filter(s => s.text.toLowerCase().includes(q));
-  }
+  if (q) segs = segs.filter(s => s.text.toLowerCase().includes(q));
   state.filteredSegments = segs;
-  renderSegments(state.filteredSegments, state.searchQuery);
-
+  renderSegments(segs, state.searchQuery);
   const count = document.getElementById('search-count');
   count.textContent = (q || state.activeSpeakerFilter) ? `${segs.length} shown` : '';
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function highlightText(text, query) {
-  if (!query) return escapeHtml(text);
-  const escaped = escapeHtml(text);
-  const escapedQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return escaped.replace(new RegExp(escapedQ, 'gi'), m => `<mark>${m}</mark>`);
+function highlightText(text, q) {
+  if (!q) return escHtml(text);
+  const eq = q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return escHtml(text).replace(new RegExp(eq,'gi'), m => `<mark>${m}</mark>`);
 }
 
 function renderSegments(segments, query) {
   const list = document.getElementById('segments-list');
   const frag = document.createDocumentFragment();
   const hasSpeakers = state.result.speakers.length > 0;
+  const q = query.toLowerCase().trim();
 
   segments.forEach(seg => {
     const spkIdx = hasSpeakers ? (state.result.speakers.indexOf(seg.speaker) % 8) : -1;
     const div = document.createElement('div');
-    div.className = 'segment border-l-4 border-slate-100 bg-white rounded-r-xl px-4 py-3 cursor-pointer transition';
+    div.className = 'segment bg-white rounded-r-xl pl-4 pr-5 py-3 cursor-pointer';
     div.setAttribute('role', 'listitem');
-    div.setAttribute('data-id', String(seg.id));
-    div.setAttribute('data-start', String(seg.start));
-    div.setAttribute('data-end', String(seg.end));
+    div.dataset.id = String(seg.id);
+    div.dataset.start = String(seg.start);
+    div.dataset.end = String(seg.end);
     if (seg.id === state.currentSegmentId) {
       div.classList.add('active');
       div.setAttribute('aria-current', 'true');
     }
 
     const spkBadge = hasSpeakers && seg.speaker
-      ? `<span class="text-xs font-semibold spk-text-${spkIdx} mr-2">${escapeHtml(seg.speaker)}</span>`
+      ? `<span class="text-xs font-semibold spk-text-${spkIdx} mr-2">${escHtml(seg.speaker)}</span>`
       : '';
-    const tsFormatted = formatDuration(seg.start);
-    const highlightedText = highlightText(seg.text, query.toLowerCase().trim());
 
     div.innerHTML = `
-      <div class="flex items-baseline gap-1 mb-1">
+      <div class="flex items-baseline gap-1 mb-0.5">
         ${spkBadge}
-        <span class="text-xs text-slate-400 font-mono">${tsFormatted}</span>
+        <span class="text-xs text-slate-400 font-mono">${fmtDur(seg.start)}</span>
       </div>
-      <p class="text-sm text-slate-700 leading-relaxed">${highlightedText}</p>
+      <p class="text-sm text-slate-700 leading-relaxed">${highlightText(seg.text, q)}</p>
     `;
     frag.appendChild(div);
   });
@@ -693,39 +785,24 @@ function renderSegments(segments, query) {
   list.appendChild(frag);
 }
 
-function formatDuration(s) {
-  const total = Math.floor(s);
-  const m = Math.floor(total / 60);
-  const sec = total % 60;
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
-
 // =========================================================================
 // Audio player sync
 // =========================================================================
 function initAudioPlayer() {
   const player = document.getElementById('audio-player');
-  const speedSel = document.getElementById('speed-select');
-
-  speedSel.addEventListener('change', () => {
-    player.playbackRate = parseFloat(speedSel.value);
+  document.getElementById('speed-select').addEventListener('change', e => {
+    player.playbackRate = parseFloat(e.target.value);
   });
 
   player.addEventListener('timeupdate', () => {
     if (!state.result) return;
     const t = player.currentTime;
     const seg = state.result.segments.find(s => t >= s.start && t < s.end);
-    if (!seg) return;
-    if (seg.id === state.currentSegmentId) return;
+    if (!seg || seg.id === state.currentSegmentId) return;
 
-    // remove old highlight
-    const old = document.querySelector('.segment.active');
-    if (old) {
-      old.classList.remove('active');
-      old.removeAttribute('aria-current');
-    }
+    document.querySelector('.segment.active')?.classList.remove('active');
+    document.querySelector('.segment.active')?.removeAttribute('aria-current');
 
-    // add new highlight
     const el = document.querySelector(`.segment[data-id="${seg.id}"]`);
     if (el) {
       el.classList.add('active');
@@ -749,8 +826,8 @@ function initAudioPlayer() {
 function initExportButtons() {
   document.querySelectorAll('.export-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const fmt = btn.dataset.fmt;
       if (!state.jobId) return;
+      const fmt = btn.dataset.fmt;
       try {
         const res = await fetch(`/api/jobs/${state.jobId}/export/${fmt}`);
         if (!res.ok) throw new Error(await res.text());
@@ -758,8 +835,7 @@ function initExportButtons() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const stem = (state.selectedFile?.name || 'transcript').replace(/\.[^.]+$/, '');
-        a.download = `${stem}.${fmt === 'md' ? 'md' : fmt}`;
+        a.download = `${(state.selectedFile?.name||'transcript').replace(/\.[^.]+$/,'')}.${fmt}`;
         a.click();
         URL.revokeObjectURL(url);
       } catch (err) {
@@ -785,31 +861,23 @@ function hideError() {
 // localStorage restore
 // =========================================================================
 function restoreSettings() {
-  const model = localStorage.getItem('selectedModel');
-  if (model) state.selectedModel = model;
+  const m = localStorage.getItem('selectedModel');
+  if (m) state.selectedModel = m;
 
-  const lang = localStorage.getItem('selectedLanguage');
-  if (lang !== null) {
-    state.selectedLanguage = lang;
-    document.getElementById('language-select').value = lang;
-  }
+  const l = localStorage.getItem('selectedLanguage');
+  if (l !== null) { state.selectedLanguage = l; document.getElementById('language-select').value = l; }
 
-  const diarize = localStorage.getItem('diarize');
-  if (diarize === 'true') {
+  if (localStorage.getItem('diarize') === 'true') {
     state.diarize = true;
     const btn = document.getElementById('diarize-toggle');
-    btn.setAttribute('aria-checked', 'true');
-    btn.querySelector('span').style.transform = 'translateX(20px)';
-    btn.classList.add('bg-brand');
-    btn.classList.remove('bg-slate-200');
+    btn.setAttribute('aria-checked','true');
+    btn.querySelector('span').style.transform = 'translateX(16px)';
+    btn.classList.add('bg-brand'); btn.classList.remove('bg-slate-200');
     document.getElementById('hf-section').classList.remove('hidden');
   }
 
-  const token = localStorage.getItem('hfToken');
-  if (token) {
-    state.hfToken = token;
-    document.getElementById('hf-token-input').value = token;
-  }
+  const tok = localStorage.getItem('hfToken');
+  if (tok) { state.hfToken = tok; document.getElementById('hf-token-input').value = tok; }
 }
 
 // =========================================================================
@@ -823,36 +891,27 @@ function init() {
   initAudioPlayer();
   initExportButtons();
 
-  // Language select
   document.getElementById('language-select').addEventListener('change', e => {
     state.selectedLanguage = e.target.value;
     localStorage.setItem('selectedLanguage', e.target.value);
   });
 
-  // Start button
   document.getElementById('start-btn').addEventListener('click', startTranscription);
-
-  // Cancel button
   document.getElementById('cancel-btn').addEventListener('click', cancelJob);
 
-  // New transcription button
   document.getElementById('new-btn').addEventListener('click', () => {
     state.result = null;
     state.jobId = null;
     state.jobStatus = null;
-    state.jobProgress = 0;
-    state.jobMessage = '';
-    state.selectedFile = null;
     state.audioUrl = null;
     state.currentSegmentId = null;
-    document.getElementById('file-info').classList.add('hidden');
-    document.getElementById('start-btn').disabled = true;
-    document.getElementById('file-input').value = '';
-    showScreen('upload');
-    hideError();
+    state.selectedFile = null;
+    clearFile();
+    const transcriptBtn = document.getElementById('tab-btn-transcript');
+    transcriptBtn.disabled = true;
+    switchTab('transcribe');
   });
 
-  // Search input
   document.getElementById('search-input').addEventListener('input', e => {
     state.searchQuery = e.target.value;
     applyFilters();

@@ -6,6 +6,8 @@ Local-first audio transcription with speaker identification. Upload a recording,
 **Models:** Whisper tiny → large-v3
 **Export:** JSON, SRT, TXT, Markdown
 
+![AmicoScript UI](amicoscript.png)
+
 ---
 
 ## Quick start — Docker (recommended)
@@ -14,7 +16,7 @@ Local-first audio transcription with speaker identification. Upload a recording,
 docker compose up --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+Open [http://localhost:8002](http://localhost:8002).
 
 On first use, the selected Whisper model is downloaded automatically and cached in a Docker volume — subsequent runs are instant.
 
@@ -31,7 +33,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The app runs at `http://localhost:8000`. The frontend is served directly by FastAPI from `frontend/index.html`.
+The app runs at `http://localhost:8002`. The frontend is served directly by FastAPI from `frontend/index.html`.
 
 ---
 

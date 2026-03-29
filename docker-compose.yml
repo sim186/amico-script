@@ -4,7 +4,7 @@ services:
   audioscript:
     build: .
     ports:
-      - "8000:8000"
+      - "8002:8002"
     volumes:
       # Edit frontend/index.html and refresh — no rebuild needed
       - ./frontend:/app/frontend:ro
