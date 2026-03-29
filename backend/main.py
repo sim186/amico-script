@@ -7,6 +7,10 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+# Settings directory for persistent config (survives app reinstalls)
+SETTINGS_DIR = Path.home() / ".amicoscript"
+SETTINGS_FILE = SETTINGS_DIR / "settings.json"
+
 import aiofiles
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +61,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Settings persistence
+# ---------------------------------------------------------------------------
+
+def _load_settings() -> dict:
+    """Load settings from disk."""
+    try:
+        if SETTINGS_FILE.exists():
+            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_settings(settings: dict) -> None:
+    """Save settings to disk."""
+    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+
+def _get_saved_hf_token() -> str:
+    """Get the HF token from saved settings, or env var."""
+    settings = _load_settings()
+    return settings.get("hf_token", "") or os.environ.get("HF_TOKEN", "")
 
 
 @app.on_event("startup")
@@ -246,12 +276,29 @@ def _worker(job_id: str) -> None:
         if opts["diarize"] and opts.get("hf_token"):
             _push_event(job_id, "diarizing", 0.82, "Running speaker diarization…")
 
-            from pyannote.audio import Pipeline  # noqa: PLC0415
+            import warnings  # noqa: PLC0415
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    from pyannote.audio import Pipeline  # noqa: PLC0415
+                except Exception as imp_err:
+                    raise RuntimeError(
+                        "Failed to load pyannote.audio. This is usually caused by "
+                        "torchcodec/FFmpeg incompatibility. Make sure FFmpeg shared "
+                        "libraries are installed (apt-get install libavcodec-dev "
+                        "libavformat-dev libavutil-dev)."
+                    ) from imp_err
+
             pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 token=opts["hf_token"],
             )
-            diarization = pipeline(file_path)
+
+            # Load audio with torchaudio instead of letting pyannote use
+            # torchcodec (which may fail if FFmpeg shared libs are missing).
+            import torchaudio  # noqa: PLC0415
+            waveform, sample_rate = torchaudio.load(file_path)
+            diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate})
 
             for seg in segments_list:
                 seg["speaker"] = _assign_speaker(seg["start"], seg["end"], diarization)
@@ -298,6 +345,22 @@ async def _cleanup_loop() -> None:
 # API Endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/api/settings")
+def get_settings() -> dict:
+    """Return saved settings (HF token, etc.)."""
+    settings = _load_settings()
+    return {"hf_token": settings.get("hf_token", "")}
+
+
+@app.post("/api/settings")
+async def save_settings(hf_token: str = Form("")) -> dict:
+    """Persist settings to disk."""
+    settings = _load_settings()
+    settings["hf_token"] = hf_token
+    _save_settings(settings)
+    return {"ok": True}
+
+
 @app.get("/api/models")
 def get_models() -> list:
     return MODELS_META
@@ -334,7 +397,7 @@ async def transcribe(
             "model": model,
             "language": language,
             "diarize": diarize.lower() == "true",
-            "hf_token": hf_token or os.environ.get("HF_TOKEN", ""),
+            "hf_token": hf_token or _get_saved_hf_token(),
             "num_speakers": int(num_speakers) if num_speakers.isdigit() else None,
         },
         "result": None,

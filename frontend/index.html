@@ -138,6 +138,7 @@
                 <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" class="text-brand hover:underline">Get token ↗</a>
                 ·
                 <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener" class="text-brand hover:underline">Accept license ↗</a>
+                <span id="hf-saved-indicator" class="hidden ml-2 text-emerald-500 font-medium">Saved ✓</span>
               </p>
             </div>
             <div>
@@ -513,6 +514,8 @@ function initDiarizeToggle() {
   document.getElementById('hf-token-input').addEventListener('input', e => {
     state.hfToken = e.target.value;
     localStorage.setItem('hfToken', e.target.value);
+    // Persist to server
+    _saveHfTokenDebounced(e.target.value);
   });
 
   document.getElementById('hf-eye-btn').addEventListener('click', () => {
@@ -899,9 +902,30 @@ function hideError() {
 }
 
 // =========================================================================
+// HF Token server persistence
+// =========================================================================
+let _hfSaveTimer = null;
+function _saveHfTokenDebounced(token) {
+  clearTimeout(_hfSaveTimer);
+  const indicator = document.getElementById('hf-saved-indicator');
+  indicator.classList.add('hidden');
+  _hfSaveTimer = setTimeout(async () => {
+    try {
+      const fd = new FormData();
+      fd.append('hf_token', token);
+      const res = await fetch('/api/settings', { method: 'POST', body: fd });
+      if (res.ok) {
+        indicator.classList.remove('hidden');
+        setTimeout(() => indicator.classList.add('hidden'), 2000);
+      }
+    } catch (_) { /* ignore save errors */ }
+  }, 600);
+}
+
+// =========================================================================
 // localStorage restore
 // =========================================================================
-function restoreSettings() {
+async function restoreSettings() {
   const m = localStorage.getItem('selectedModel');
   if (m) state.selectedModel = m;
 
@@ -917,7 +941,16 @@ function restoreSettings() {
     document.getElementById('hf-section').classList.remove('hidden');
   }
 
-  const tok = localStorage.getItem('hfToken');
+  // Load HF token: try server first, then localStorage fallback
+  let tok = '';
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const data = await res.json();
+      tok = data.hf_token || '';
+    }
+  } catch (_) { /* server not available, use localStorage */ }
+  if (!tok) tok = localStorage.getItem('hfToken') || '';
   if (tok) { state.hfToken = tok; document.getElementById('hf-token-input').value = tok; }
 }
 

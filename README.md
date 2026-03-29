@@ -59,14 +59,40 @@ This will create a `dist/AmicoScript` directory containing the compiled applicat
 
 ## Speaker diarization (optional)
 
-Speaker identification requires a free HuggingFace account:
+Speaker identification uses the [pyannote](https://github.com/pyannote/pyannote-audio) pipeline, which requires a free Hugging Face account and accepting two model licenses.
 
-1. Create an account at [huggingface.co](https://huggingface.co)
-2. Accept the model license at [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
-3. Generate a token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-4. Enable diarization in the AmicoScript UI and paste your token
+### Step 1 — Create a Hugging Face account
 
-The token is saved in your browser's `localStorage` — it never leaves your machine.
+Go to [huggingface.co/join](https://huggingface.co/join) and sign up (or log in if you already have an account).
+
+### Step 2 — Accept the model licenses
+
+You must accept the terms on **both** of these model pages (they are gated models):
+
+1. **Speaker Diarization pipeline** — [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+   - Open the link and scroll down to the gated access form
+   - Check both checkboxes (share contact info + agree to license)
+   - Click **"Agree and access repository"**
+
+2. **Segmentation model** (required dependency) — [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+   - Same process: open the link, check the boxes, click **"Agree and access repository"**
+
+> **Note:** If you skip either license, you will get a `403 Client Error: Cannot access gated repo` error when trying to diarize.
+
+### Step 3 — Create an access token
+
+1. Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+2. Click **"Create new token"**
+3. Give it a name (e.g. `amicoscript`)
+4. Select the **"Read"** role (that's all that's needed)
+5. Click **"Create token"**
+6. Copy the token — it starts with `hf_`
+
+### Step 4 — Paste the token in AmicoScript
+
+1. In the AmicoScript sidebar, toggle **"Speaker diarization"** on
+2. Paste your `hf_` token into the **HuggingFace Token** field
+3. The token is saved automatically — it persists across restarts in `~/.amicoscript/settings.json` and never leaves your machine
 
 ---
 
@@ -75,6 +101,8 @@ The token is saved in your browser's `localStorage` — it never leaves your mac
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/models` | Available Whisper models |
+| `GET` | `/api/settings` | Get saved settings (HF token) |
+| `POST` | `/api/settings` | Save settings (HF token persisted to disk) |
 | `POST` | `/api/transcribe` | Upload file, start job → `{job_id}` |
 | `GET` | `/api/jobs/{id}/stream` | SSE progress stream |
 | `POST` | `/api/jobs/{id}/cancel` | Cancel running job |
