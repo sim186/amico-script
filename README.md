@@ -10,6 +10,8 @@ Local-first audio transcription with speaker identification. Upload a recording,
 
 ![AmicoScript UI](amicoscript.png)
 
+![AmicoScript diarization](amicoscript-diarization.png)
+
 ---
 
 ## Quick start — Docker (recommended)
