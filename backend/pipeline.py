@@ -460,6 +460,32 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
             num_speakers = opts.get("num_speakers")
             diarization = pipeline(diarization_input, num_speakers=num_speakers)
 
+            # pyannote >= 3.3 may return a wrapper object (DiarizeOutput,
+            # Output, etc.) instead of a bare Annotation.  Rather than
+            # hard-coding an attribute name that changes across versions, we
+            # probe for the first field that actually has itertracks().
+            if not hasattr(diarization, "itertracks"):
+                annotation = None
+                # Named-tuple path (covers both dataclasses and NamedTuples)
+                for field in getattr(diarization, "_fields", []):
+                    val = getattr(diarization, field, None)
+                    if hasattr(val, "itertracks"):
+                        annotation = val
+                        break
+                # Dataclass / regular object path
+                if annotation is None:
+                    for val in getattr(diarization, "__dict__", {}).values():
+                        if hasattr(val, "itertracks"):
+                            annotation = val
+                            break
+                if annotation is None:
+                    raise RuntimeError(
+                        f"pyannote returned {type(diarization).__name__} "
+                        f"with no itertracks-capable field; attributes: "
+                        f"{list(getattr(diarization, '_fields', None) or getattr(diarization, '__dict__', {}).keys())}"
+                    )
+                diarization = annotation
+
             for seg in segments_list:
                 seg["speaker"] = _assign_speaker(seg["start"], seg["end"], diarization)
 
