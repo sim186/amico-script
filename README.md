@@ -54,6 +54,8 @@ python package.py
 This will create a `dist/AmicoScript` directory containing the compiled application. On macOS, it will also generate an `.app` bundle.
 
 > **Note:** The standalone executable bundles the Python environment and its dependencies. On first launch, the app will automatically download the correct `ffmpeg` executable for the user's operating system (Windows, macOS, or Linux) directly next to the standalone executable, keeping the initial bundle size small and avoiding manual user installations.
+>
+> **Diarization packaging note:** speaker diarization in standalone builds requires `pyannote.audio` package data files (including telemetry config). The included packaging scripts already collect these files.
 
 ---
 
@@ -94,21 +96,35 @@ You must accept the terms on **both** of these model pages (they are gated model
 2. Paste your `hf_` token into the **HuggingFace Token** field
 3. The token is saved automatically — it persists across restarts in `~/.amicoscript/settings.json` and never leaves your machine
 
+### Troubleshooting diarization in standalone builds
+
+- Error: `No such file or directory: ... pyannote/audio/telemetry/config.yaml`
+  - Cause: missing `pyannote.audio` package data in the bundle.
+  - Fix: rebuild using `python package.py` from the repository root.
+
+- Error: `Transcription error: 'NoneType' object has no attribute 'write'`
+  - Cause: windowed (`--noconsole`) process started without attached stdio streams.
+  - Fix: use the current build scripts/codebase (includes stdio fallback guards) and rebuild.
+
+- Packaging cleanup fails with `Access is denied` in `dist/AmicoScript`
+  - Cause: previous `AmicoScript.exe` still running and locking files.
+  - Fix: close/kill the running app process, then run packaging again.
+
 ---
 
 ## API reference
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/models` | Available Whisper models |
-| `GET` | `/api/settings` | Get saved settings (HF token) |
-| `POST` | `/api/settings` | Save settings (HF token persisted to disk) |
-| `POST` | `/api/transcribe` | Upload file, start job → `{job_id}` |
-| `GET` | `/api/jobs/{id}/stream` | SSE progress stream |
-| `POST` | `/api/jobs/{id}/cancel` | Cancel running job |
-| `GET` | `/api/audio/{id}` | Raw audio (for in-browser player) |
-| `GET` | `/api/jobs/{id}/result` | Full JSON result |
-| `GET` | `/api/jobs/{id}/export/{fmt}` | Download transcript (`json`, `srt`, `txt`, `md`) |
+| Method | Path                          | Description                                      |
+| ------ | ----------------------------- | ------------------------------------------------ |
+| `GET`  | `/api/models`                 | Available Whisper models                         |
+| `GET`  | `/api/settings`               | Get saved settings (HF token)                    |
+| `POST` | `/api/settings`               | Save settings (HF token persisted to disk)       |
+| `POST` | `/api/transcribe`             | Upload file, start job → `{job_id}`              |
+| `GET`  | `/api/jobs/{id}/stream`       | SSE progress stream                              |
+| `POST` | `/api/jobs/{id}/cancel`       | Cancel running job                               |
+| `GET`  | `/api/audio/{id}`             | Raw audio (for in-browser player)                |
+| `GET`  | `/api/jobs/{id}/result`       | Full JSON result                                 |
+| `GET`  | `/api/jobs/{id}/export/{fmt}` | Download transcript (`json`, `srt`, `txt`, `md`) |
 
 ---
 
