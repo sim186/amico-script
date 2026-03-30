@@ -36,6 +36,38 @@ python run.py
 
 ---
 
+## Using with venv (recommended for local development)
+
+The project works great inside a Python virtual environment. The examples below create a `.venv` folder in the repository root.
+
+- Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
+python run.py
+```
+
+- macOS / Linux (bash/zsh):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+python run.py
+```
+
+If PowerShell blocks script execution when activating the virtual environment, you can enable local script execution for your user with:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+```
+
+Using a venv keeps dependencies isolated and matches how packaging and tests are performed in this repository.
+
+---
+
 ## Standalone Executable (macOS / Windows)
 
 You can build a standalone executable that doesn't require Docker or a Python environment using PyInstaller.
@@ -56,6 +88,32 @@ This will create a `dist/AmicoScript` directory containing the compiled applicat
 > **Note:** The standalone executable bundles the Python environment and its dependencies. On first launch, the app will automatically download the correct `ffmpeg` executable for the user's operating system (Windows, macOS, or Linux) directly next to the standalone executable, keeping the initial bundle size small and avoiding manual user installations.
 >
 > **Diarization packaging note:** speaker diarization in standalone builds requires `pyannote.audio` package data files (including telemetry config). The included packaging scripts already collect these files.
+
+### Packaging from a virtual environment
+
+If you prefer to build from an isolated `venv`, activate it and run the packaging script from the repository root. This ensures the bundled app uses the same dependency set you tested locally.
+
+- Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
+pip install pyinstaller
+.venv\Scripts\python.exe package.py
+```
+
+- macOS / Linux (bash/zsh):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+pip install pyinstaller
+python package.py
+```
+
+Note: On Windows make sure no running `AmicoScript.exe` is locking files in `dist/AmicoScript` when packaging; close any running app before rebuilding.
 
 ---
 
