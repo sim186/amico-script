@@ -1,0 +1,55 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt || true; fi
+          pip install pyinstaller
+        shell: bash
+
+      - name: Build with PyInstaller
+        run: |
+          python package.py
+        shell: bash
+
+      - name: Create zip artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pwsh -Command "if (-Not (Test-Path build\artifacts)) { New-Item -ItemType Directory -Path build\artifacts | Out-Null }; Compress-Archive -Path 'dist/AmicoScript/*' -DestinationPath "build\artifacts\AmicoScript-${{ github.ref_name }}-windows.zip" -Force"
+
+      - name: Create zip artifact (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p build/artifacts
+          zip -r "build/artifacts/AmicoScript-${{ github.ref_name }}-${{ matrix.os }}.zip" dist/AmicoScript || true
+        shell: bash
+
+      - name: Create GitHub Release and upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          files: build/artifacts/*.zip
