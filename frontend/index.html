@@ -565,6 +565,180 @@ const state = {
   },
 };
 
+// Color palette constant and helpers
+const PALETTE = ['#6c63ff','#f59e0b','#10b981','#f472b6','#60a5fa','#fb7185','#a78bfa','#fbbf24','#16a34a','#ef4444'];
+
+// Map of palette attachments: inputId -> {container, hidden, wrap}
+window.__paletteMap = window.__paletteMap || {};
+
+function attachPaletteToInput(inputId, sizePx = 28) {
+  const existing = document.getElementById(inputId);
+  if (!existing) return;
+  const currentVal = (existing.value || '#6c63ff').toLowerCase();
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.id = inputId;
+  hidden.value = currentVal;
+  hidden.name = existing.name || inputId;
+
+  // compact combobox button (shows current swatch + caret)
+  const container = document.createElement('div');
+  container.className = 'relative inline-block';
+  container.style.display = 'inline-block';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'flex items-center gap-1 p-0 border-0 bg-transparent focus:outline-none';
+  btn.style.padding = '0';
+  btn.style.background = 'transparent';
+
+  const sw = document.createElement('span');
+  sw.style.display = 'inline-block';
+  sw.style.width = sizePx + 'px';
+  sw.style.height = sizePx + 'px';
+  sw.style.borderRadius = '6px';
+  sw.style.background = currentVal;
+  sw.style.border = '1px solid rgba(0,0,0,0.06)';
+
+  const caret = document.createElement('span');
+  caret.className = 'text-slate-400';
+  caret.style.fontSize = '12px';
+  caret.style.lineHeight = '1';
+  caret.textContent = '▾';
+
+  btn.appendChild(sw);
+  btn.appendChild(caret);
+
+  // popover with palette grid (rendered as top-level overlay to avoid clipping)
+  const pop = document.createElement('div');
+  pop.className = 'bg-white border border-slate-200 rounded-lg shadow-lg p-2 grid gap-2';
+  pop.style.display = 'none';
+  pop.style.gridTemplateColumns = 'repeat(5, 1fr)';
+  pop.style.minWidth = '120px';
+  pop.style.maxWidth = '220px';
+  pop.style.boxSizing = 'border-box';
+  pop.style.position = 'absolute';
+  pop.style.zIndex = '10000';
+
+  PALETTE.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rounded-full border-2 border-transparent focus:outline-none';
+    b.style.width = (sizePx) + 'px';
+    b.style.height = (sizePx) + 'px';
+    b.style.background = c;
+    b.dataset.color = c.toLowerCase();
+    b.setAttribute('aria-label', `Color ${c}`);
+    if (c.toLowerCase() === currentVal) b.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pop.querySelectorAll('button').forEach(x => x.classList.remove('ring-2', 'ring-offset-1', 'ring-slate-400'));
+      b.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+      hidden.value = c;
+      try { hidden.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+      sw.style.background = c;
+      pop.style.display = 'none';
+    });
+    pop.appendChild(b);
+  });
+
+  // toggle popover — position it relative to the button but rendered in document.body
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (pop.style.display === 'none' || !pop.style.display) {
+      // ensure pop is in body so it's not clipped by overflow
+      if (!document.body.contains(pop)) document.body.appendChild(pop);
+      pop.style.display = 'grid';
+      // position
+      const rect = btn.getBoundingClientRect();
+      // temporarily make visible to measure width
+      pop.style.left = '0px'; pop.style.top = '0px';
+      const popW = Math.max(pop.offsetWidth || 160, 120);
+      const left = Math.min(Math.max(rect.right - popW + window.scrollX, 8 + window.scrollX), Math.max(window.innerWidth - popW - 8 + window.scrollX, 8 + window.scrollX));
+      const top = rect.bottom + 6 + window.scrollY;
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+
+      // close handlers
+      setTimeout(() => {
+        function closeHandler(ev) {
+          if (!container.contains(ev.target) && !pop.contains(ev.target)) {
+            pop.style.display = 'none';
+            document.removeEventListener('click', closeHandler);
+            window.removeEventListener('scroll', closeOnScroll);
+            window.removeEventListener('resize', closeOnScroll);
+          }
+        }
+        function closeOnScroll() { pop.style.display = 'none'; document.removeEventListener('click', closeHandler); window.removeEventListener('scroll', closeOnScroll); window.removeEventListener('resize', closeOnScroll); }
+        document.addEventListener('click', closeHandler);
+        window.addEventListener('scroll', closeOnScroll);
+        window.addEventListener('resize', closeOnScroll);
+      }, 0);
+    } else {
+      pop.style.display = 'none';
+    }
+  });
+
+  container.appendChild(hidden);
+  container.appendChild(btn);
+  // do not append pop as child — it's rendered at body level to avoid clipping
+  existing.replaceWith(container);
+  window.__paletteMap[inputId] = { container, hidden, btn, sw, pop };
+}
+
+function setPaletteValue(inputId, color) {
+  const rec = window.__paletteMap && window.__paletteMap[inputId];
+  if (!rec) {
+    const el = document.getElementById(inputId);
+    if (el) el.value = color;
+    return;
+  }
+  rec.hidden.value = color;
+  if (rec.sw) rec.sw.style.background = color;
+  if (rec.pop) {
+    rec.pop.querySelectorAll('button').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-slate-400'));
+    const match = Array.from(rec.pop.querySelectorAll('button')).find(b => (b.dataset.color || '').toLowerCase() === (color || '').toLowerCase());
+    if (match) match.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+    try { rec.hidden.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+  }
+}
+
+// Convert hex color to rgba string with given alpha (supports #RGB and #RRGGBB)
+function hexToRgba(hex, alpha) {
+  if (!hex) return null;
+  let h = String(hex).replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (h.length !== 6) return null;
+  const bigint = parseInt(h, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Apply a subtle accent to the library panel and the folder label when a folder is selected
+function setLibraryAccent(hex) {
+  const panel = document.getElementById('tab-library');
+  const label = document.getElementById('library-folder-label');
+  if (!panel || !label) return;
+  if (hex) {
+    const bg = hexToRgba(hex, 0.04) || '';
+    const hdr = hexToRgba(hex, 0.09) || '';
+    panel.style.backgroundColor = bg;
+    panel.style.transition = 'background-color 180ms ease';
+    // style header label gently
+    label.style.backgroundColor = hdr;
+    label.style.padding = '6px 10px';
+    label.style.borderRadius = '8px';
+    label.style.transition = 'background-color 180ms ease, padding 120ms ease';
+  } else {
+    panel.style.backgroundColor = '';
+    label.style.backgroundColor = '';
+    label.style.padding = '';
+    label.style.borderRadius = '';
+  }
+}
+
 
 // =========================================================================
 // Version fetch
@@ -1363,6 +1537,7 @@ function buildFolderNode(folder, all) {
   // use server-provided color_code
   const useColor = folder && folder.color_code;
   const colorDot = useColor ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mr-2" style="background:${escHtml(folder.color_code)}"></span>` : '';
+  const countBadge = typeof folder.count !== 'undefined' ? `<span class="text-xs text-slate-400 ml-2">(${escHtml(String(folder.count))})</span>` : '';
   item.innerHTML = `
     ${arrow}
     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -1370,6 +1545,7 @@ function buildFolderNode(folder, all) {
     </svg>
     ${colorDot}
     <span class="flex-1 truncate">${escHtml(folder.name)}</span>
+    ${countBadge}
   `;
   wrapper.appendChild(item);
 
@@ -1400,9 +1576,16 @@ function selectFolder(folderId) {
       if (el.dataset && String(el.dataset.folderId) === String(folderId)) el.classList.add('active');
     });
   }
-  document.getElementById('library-folder-label').textContent =
-    folderId ? (state.library.folders.find(f => String(f.id) === String(folderId))?.name || 'Folder') : 'All recordings';
+  const labelEl = document.getElementById('library-folder-label');
+  const folder = folderId ? state.library.folders.find(f => String(f.id) === String(folderId)) : null;
+  labelEl.textContent = folderId ? (folder?.name || 'Folder') : 'All recordings';
+  // Apply subtle background accent to the library panel and header
+  if (folder && folder.color_code) setLibraryAccent(folder.color_code);
+  else setLibraryAccent(null);
+
   fetchLibrary();
+  // Refresh tag list counts when folder changes
+  fetchTags();
   if (state.activeTab !== 'library') switchTab('library');
 }
 
@@ -1450,46 +1633,93 @@ function showInlineRenameFolder(folder) {
     })();
     return;
   }
-  if (item.querySelector('.folder-rename-form')) return; // already editing
 
-  const nameSpan = item.querySelector('.flex-1');
-  const originalName = folder.name || '';
-  const wrapper = document.createElement('div');
-  wrapper.className = 'folder-rename-form flex items-center gap-2 ml-2';
-  const input = document.createElement('input');
-  input.type = 'text'; input.value = originalName;
-  input.className = 'rounded border border-slate-200 px-2 py-1 text-sm focus:outline-none';
-  const color = document.createElement('input');
-  color.type = 'color';
-  color.value = folder.color_code || '#6c63ff';
-  color.className = 'w-8 h-8 p-0 border-0 bg-transparent';
-  color.title = 'Folder color';
+  // avoid duplicate popovers
+  const popId = `folder-rename-pop-${folder.id}`;
+  if (document.getElementById(popId)) return;
+
+  const rect = item.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = popId;
+  pop.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg p-3';
+  pop.style.left = Math.max(8 + window.scrollX, rect.left + window.scrollX) + 'px';
+  pop.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+  pop.style.minWidth = '220px';
+  pop.style.boxSizing = 'border-box';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.value = folder.name || '';
+  nameInput.className = 'w-full rounded border border-slate-200 px-2 py-1 text-sm focus:outline-none mb-2';
+
+  const inlineId = `inline-folder-color-${folder.id}`;
+  const tmpInput = document.createElement('input');
+  tmpInput.type = 'hidden';
+  tmpInput.id = inlineId;
+  tmpInput.value = folder.color_code || '#6c63ff';
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center gap-2 justify-end mt-2';
   const saveBtn = document.createElement('button');
-  saveBtn.className = 'px-2 py-1 text-xs rounded bg-brand text-white'; saveBtn.textContent = 'Save';
+  saveBtn.className = 'px-3 py-1 text-sm rounded bg-brand text-white'; saveBtn.textContent = 'Save';
   const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'px-2 py-1 text-xs rounded bg-slate-100 text-slate-600'; cancelBtn.textContent = 'Cancel';
+  cancelBtn.className = 'px-3 py-1 text-sm rounded bg-slate-100 text-slate-600'; cancelBtn.textContent = 'Cancel';
 
-    saveBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const newName = input.value.trim();
-    const newColor = color.value;
+  pop.appendChild(nameInput);
+  pop.appendChild(tmpInput);
+  pop.appendChild(btnRow);
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+
+  document.body.appendChild(pop);
+
+  // attach palette to hidden input now that it's in the document
+  attachPaletteToInput(inlineId, 20);
+
+  // live preview: update library accent as the user picks colors
+  const hiddenInputEl = document.getElementById(inlineId);
+  let _colorPreviewHandler = null;
+  if (hiddenInputEl) {
+    _colorPreviewHandler = (e) => { try { if (String(state.library.selectedFolderId) === String(folder.id)) setLibraryAccent(e.target.value); } catch (_) {} };
+    hiddenInputEl.addEventListener('input', _colorPreviewHandler);
+  }
+
+  // focus
+  nameInput.focus(); nameInput.select();
+
+  async function doSave() {
+    const newName = nameInput.value.trim();
+    const newColor = (document.getElementById(inlineId) && document.getElementById(inlineId).value) || '#6c63ff';
     if (!newName) return;
     try {
-      const fd = new FormData();
-      fd.append('name', newName);
-      fd.append('color_code', newColor || '#6c63ff');
+      const fd = new FormData(); fd.append('name', newName); fd.append('color_code', newColor || '#6c63ff');
       const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd });
       if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+      // optimistic UI: apply accent immediately if we're editing the currently selected folder
+      try { if (String(state.library.selectedFolderId) === String(folder.id)) setLibraryAccent(newColor); } catch (_) {}
       await fetchFolders();
+      fetchTags();
     } catch (err) { alert(`Rename failed: ${err.message}`); }
-    wrapper.remove();
+    if (hiddenInputEl && _colorPreviewHandler) hiddenInputEl.removeEventListener('input', _colorPreviewHandler);
+    pop.remove();
+  }
+
+  saveBtn.addEventListener('click', async (e) => { e.stopPropagation(); await doSave(); });
+  cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); if (hiddenInputEl && _colorPreviewHandler) hiddenInputEl.removeEventListener('input', _colorPreviewHandler); pop.remove(); });
+
+  // keyboard handlers
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+    if (e.key === 'Escape') { pop.remove(); }
   });
 
-  cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); wrapper.remove(); });
-
-  wrapper.appendChild(input); wrapper.appendChild(color); wrapper.appendChild(saveBtn); wrapper.appendChild(cancelBtn);
-  item.appendChild(wrapper);
-  input.focus(); input.select();
+  // close on outside click
+  setTimeout(() => {
+    function closeHandler(ev) {
+      if (!pop.contains(ev.target) && !item.contains(ev.target)) pop.remove();
+    }
+    document.addEventListener('click', closeHandler, { once: true });
+  }, 0);
 }
 
 async function deleteFolderConfirm(folderId) {
@@ -1508,7 +1738,9 @@ async function deleteFolderConfirm(folderId) {
 // =========================================================================
 async function fetchTags() {
   try {
-    const res = await fetch('/api/tags');
+    const params = new URLSearchParams();
+    if (state.library.selectedFolderId) params.set('folder_id', state.library.selectedFolderId);
+    const res = await fetch('/api/tags' + (params.toString() ? ('?' + params.toString()) : ''));
     if (!res.ok) return;
     state.library.tags = await res.json();
     renderTagSidebar();
@@ -1519,23 +1751,47 @@ function renderTagSidebar() {
   const list = document.getElementById('tag-list');
   list.innerHTML = '';
   state.library.tags.forEach(tag => {
+    const container = document.createElement('span');
+    container.className = 'inline-flex items-center gap-2';
+
     const pill = document.createElement('span');
-    pill.className = 'tag-pill cursor-pointer' + (state.library.selectedTagId === tag.id ? ' ring-2 ring-offset-1 ring-slate-400' : '');
+    pill.className = 'tag-pill' + (state.library.selectedTagId === tag.id ? ' ring-2 ring-offset-1 ring-slate-400' : '');
     pill.dataset.tagId = tag.id;
     pill.dataset.tagName = tag.name;
     pill.style.background = tag.color_code;
     pill.textContent = tag.name;
     pill.title = 'Click to filter · Double-click to edit · Right-click for options';
-    pill.onclick = () => filterByTag(tag.id, tag.name);
+
+    const count = typeof tag.count !== 'undefined' ? Number(tag.count) : null;
+    const disabled = state.library.selectedFolderId && (count === 0 || count === null);
+    if (disabled) {
+      pill.classList.add('opacity-40', 'cursor-not-allowed');
+      pill.onclick = (e) => { e.stopPropagation(); /* disabled */ };
+    } else {
+      pill.classList.add('cursor-pointer');
+      pill.onclick = () => filterByTag(tag.id, tag.name);
+    }
     pill.ondblclick = (e) => { e.stopPropagation(); showTagEditForm(tag); };
     pill.oncontextmenu = (e) => { e.preventDefault(); showTagMenu(e, tag); };
-    list.appendChild(pill);
+
+    container.appendChild(pill);
+    if (count !== null) {
+      const badge = document.createElement('span');
+      badge.className = 'text-xs text-slate-400';
+      badge.textContent = count;
+      container.appendChild(badge);
+    }
+    list.appendChild(container);
   });
 }
 
 function filterByTag(tagId, tagName) {
+  // Toggle behavior: clicking the active tag clears the filter
+  if (state.library.selectedTagId === tagId) {
+    clearTagFilter();
+    return;
+  }
   state.library.selectedTagId = tagId;
-  state.library.selectedFolderId = null;
   renderTagSidebar();
   const filterEl = document.getElementById('lib-tag-filter');
   const filterName = document.getElementById('lib-tag-filter-name');
@@ -1583,7 +1839,11 @@ function showTagEditForm(tag) {
   _editingTagId = tag.id;
   document.getElementById('edit-tag-form').classList.remove('hidden');
   document.getElementById('edit-tag-name').value = tag.name;
-  document.getElementById('edit-tag-color').value = tag.color_code || '#6c63ff';
+  // update hidden input value and palette selection
+  const editColor = tag.color_code || '#6c63ff';
+  const editInput = document.getElementById('edit-tag-color');
+  if (editInput) editInput.value = editColor;
+  setPaletteValue('edit-tag-color', editColor);
   document.getElementById('edit-tag-name').focus();
 }
 
@@ -1591,7 +1851,8 @@ function hideTagEditForm() {
   _editingTagId = null;
   document.getElementById('edit-tag-form').classList.add('hidden');
   document.getElementById('edit-tag-name').value = '';
-  document.getElementById('edit-tag-color').value = '#6c63ff';
+  if (document.getElementById('edit-tag-color')) document.getElementById('edit-tag-color').value = '#6c63ff';
+  setPaletteValue('edit-tag-color', '#6c63ff');
 }
 
 async function updateTag() {
@@ -1642,8 +1903,10 @@ function hideNewFolderForm() {
   form.classList.add('hidden');
   const input = document.getElementById('new-folder-name');
   input.value = '';
-  const color = document.getElementById('new-folder-color');
-  if (color) color.value = '#6c63ff';
+  if (document.getElementById('new-folder-color')) {
+    document.getElementById('new-folder-color').value = '#6c63ff';
+    setPaletteValue('new-folder-color', '#6c63ff');
+  }
 }
 
 function showNewTagForm() {
@@ -1658,7 +1921,10 @@ function hideNewTagForm() {
   const form = document.getElementById('new-tag-form');
   form.classList.add('hidden');
   document.getElementById('new-tag-name').value = '';
-  document.getElementById('new-tag-color').value = '#6c63ff';
+  if (document.getElementById('new-tag-color')) {
+    document.getElementById('new-tag-color').value = '#6c63ff';
+    setPaletteValue('new-tag-color', '#6c63ff');
+  }
 }
 
 // =========================================================================
@@ -1827,6 +2093,8 @@ async function moveRecordingToFolder(recordingId, folderId) {
       state.library.recordings = state.library.recordings.filter(r => r.id !== recordingId);
     }
     renderLibrary();
+    // Refresh folder/tag counts so badges/pills reflect the move
+    try { fetchFolders(); fetchTags(); } catch (_) {}
     // Close any open popovers
     document.querySelectorAll('.popover').forEach(p => p.classList.add('hidden'));
   } catch (err) { alert(`Move failed: ${err.message}`); }
@@ -1849,6 +2117,8 @@ async function toggleRecordingTag(recordingId, tagId, add) {
     }
     // Re-render only the tag pills on this card without rebuilding everything
     fetchLibrary();
+    // Update tag counts (scoped counts) so sidebar badges stay accurate
+    try { fetchTags(); } catch (_) {}
   } catch (err) { alert(`Tag update failed: ${err.message}`); }
 }
 
@@ -1987,6 +2257,15 @@ function initGlobalSearch() {
 
   input.addEventListener('keydown', e => {
     if (e.key === 'Escape') { dropdown.classList.add('hidden'); input.blur(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) {
+        doSearchToLibrary(q);
+        dropdown.classList.add('hidden');
+        input.blur();
+      }
+    }
   });
 
   document.addEventListener('click', e => {
@@ -2028,12 +2307,42 @@ async function runGlobalSearch(q) {
   } catch (_) {}
 }
 
+// Perform a search and populate the library view with matching recordings
+async function doSearchToLibrary(q) {
+  if (!q) return;
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=100`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    // Fetch recording details in parallel
+    const recPromises = rows.map(r => fetch(`/api/recordings/${r.recording_id}`).then(rp => rp.ok ? rp.json() : null).catch(() => null));
+    const recs = (await Promise.all(recPromises)).filter(Boolean);
+    state.library.recordings = recs;
+    // clear folder/tag selection when doing a free-text search
+    state.library.selectedFolderId = null;
+    state.library.selectedTagId = null;
+    // refresh counts so sidebar badges update
+    try { fetchFolders(); fetchTags(); } catch (_) {}
+    renderLibrary();
+    if (state.activeTab !== 'library') switchTab('library');
+  } catch (err) {
+    console.error('Search to library failed', err);
+  }
+}
+
 // =========================================================================
 // === LIBRARY INIT ===
 // =========================================================================
 function initLibrary() {
   fetchFolders();
   fetchTags();
+
+  // Replace native color inputs with the fixed PALETTE UI (hidden input + palette buttons)
+  try {
+    attachPaletteToInput('new-folder-color', 28);
+    attachPaletteToInput('new-tag-color', 28);
+    attachPaletteToInput('edit-tag-color', 28);
+  } catch (e) { /* best-effort; continue if DOM differs */ }
 
   // New-folder inline form handlers
   document.getElementById('new-folder-btn').addEventListener('click', (e) => { e.stopPropagation(); showNewFolderForm(); });

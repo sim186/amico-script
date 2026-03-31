@@ -55,6 +55,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
+from sqlalchemy import func
 from sse_starlette.sse import EventSourceResponse
 
 import state
@@ -100,6 +101,12 @@ MODELS_META = [
     {"id": "large-v2", "name": "Large v2", "params": "~1.5B",  "ram": "~10 GB", "speed": 1, "accuracy": 5},
     {"id": "large-v3", "name": "Large v3", "params": "~1.5B",  "ram": "~10 GB", "speed": 1, "accuracy": 5},
 ]
+
+# Allowed colors for tags and folders (lowercase)
+ALLOWED_COLORS = {
+    '#6c63ff', '#f59e0b', '#10b981', '#f472b6', '#60a5fa',
+    '#fb7185', '#a78bfa', '#fbbf24', '#16a34a', '#ef4444',
+}
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -750,6 +757,24 @@ async def rename_recording_speaker(
 @app.get("/api/folders")
 def list_folders(session: Session = Depends(get_session)) -> list:
     folders = session.exec(select(Folder)).all()
+    # aggregate immediate recordings per folder
+    counts = {}
+    try:
+        rows = session.exec(
+            select(Recording.folder_id, func.count(Recording.id)).group_by(Recording.folder_id)
+        ).all()
+        for r in rows:
+            try:
+                key = r[0]
+                val = int(r[1])
+            except Exception:
+                tup = tuple(r)
+                key = tup[0]
+                val = int(tup[1])
+            counts[key] = val
+    except Exception:
+        counts = {}
+
     return [
         {
             "id": f.id,
@@ -757,6 +782,7 @@ def list_folders(session: Session = Depends(get_session)) -> list:
             "parent_id": f.parent_id,
             "color_code": f.color_code,
             "created_at": f.created_at,
+            "count": counts.get(f.id, 0),
         }
         for f in folders
     ]
@@ -769,6 +795,9 @@ async def create_folder(
     color_code: str = Form("#6c63ff"),
     session: Session = Depends(get_session),
 ) -> dict:
+    # Validate color_code against allowed palette
+    if color_code and color_code.lower() not in ALLOWED_COLORS:
+        raise HTTPException(400, "Invalid color_code")
     folder = Folder(name=name, parent_id=parent_id or None, color_code=color_code or "#6c63ff")
     session.add(folder)
     session.commit()
@@ -798,6 +827,8 @@ async def update_folder(
     if parent_id != "__unset__":
         folder.parent_id = parent_id or None
     if color_code != "__unset__":
+        if color_code and color_code.lower() not in ALLOWED_COLORS:
+            raise HTTPException(400, "Invalid color_code")
         folder.color_code = color_code or "#6c63ff"
     session.add(folder)
     session.commit()
@@ -860,10 +891,36 @@ def delete_folder(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/tags")
-def list_tags(session: Session = Depends(get_session)) -> list:
+def list_tags(folder_id: str = "", session: Session = Depends(get_session)) -> list:
+    tags = session.exec(select(Tag)).all()
+    counts = {}
+    try:
+        if folder_id:
+            rows = session.exec(
+                select(RecordingTag.tag_id, func.count(RecordingTag.recording_id))
+                .join(Recording, Recording.id == RecordingTag.recording_id)
+                .where(Recording.folder_id == folder_id)
+                .group_by(RecordingTag.tag_id)
+            ).all()
+        else:
+            rows = session.exec(
+                select(RecordingTag.tag_id, func.count(RecordingTag.recording_id)).group_by(RecordingTag.tag_id)
+            ).all()
+        for r in rows:
+            try:
+                key = r[0]
+                val = int(r[1])
+            except Exception:
+                tup = tuple(r)
+                key = tup[0]
+                val = int(tup[1])
+            counts[key] = val
+    except Exception:
+        counts = {}
+
     return [
-        {"id": t.id, "name": t.name, "color_code": t.color_code}
-        for t in session.exec(select(Tag)).all()
+        {"id": t.id, "name": t.name, "color_code": t.color_code, "count": counts.get(t.id, 0)}
+        for t in tags
     ]
 
 
@@ -873,6 +930,8 @@ async def create_tag(
     color_code: str = Form("#6c63ff"),
     session: Session = Depends(get_session),
 ) -> dict:
+    if color_code and color_code.lower() not in ALLOWED_COLORS:
+        raise HTTPException(400, "Invalid color_code")
     tag = Tag(name=name, color_code=color_code)
     session.add(tag)
     session.commit()
@@ -893,6 +952,8 @@ async def update_tag(
     if name:
         tag.name = name
     if color_code:
+        if color_code and color_code.lower() not in ALLOWED_COLORS:
+            raise HTTPException(400, "Invalid color_code")
         tag.color_code = color_code
     session.add(tag)
     session.commit()
