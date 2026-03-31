@@ -755,6 +755,7 @@ def list_folders(session: Session = Depends(get_session)) -> list:
             "id": f.id,
             "name": f.name,
             "parent_id": f.parent_id,
+            "color_code": f.color_code,
             "created_at": f.created_at,
         }
         for f in folders
@@ -765,9 +766,10 @@ def list_folders(session: Session = Depends(get_session)) -> list:
 async def create_folder(
     name: str = Form(...),
     parent_id: str = Form(""),
+    color_code: str = Form("#6c63ff"),
     session: Session = Depends(get_session),
 ) -> dict:
-    folder = Folder(name=name, parent_id=parent_id or None)
+    folder = Folder(name=name, parent_id=parent_id or None, color_code=color_code or "#6c63ff")
     session.add(folder)
     session.commit()
     session.refresh(folder)
@@ -775,6 +777,7 @@ async def create_folder(
         "id": folder.id,
         "name": folder.name,
         "parent_id": folder.parent_id,
+        "color_code": folder.color_code,
         "created_at": folder.created_at,
     }
 
@@ -784,6 +787,7 @@ async def update_folder(
     folder_id: str,
     name: str = Form(""),
     parent_id: str = Form("__unset__"),
+    color_code: str = Form("__unset__"),
     session: Session = Depends(get_session),
 ) -> dict:
     folder = session.get(Folder, folder_id)
@@ -793,6 +797,8 @@ async def update_folder(
         folder.name = name
     if parent_id != "__unset__":
         folder.parent_id = parent_id or None
+    if color_code != "__unset__":
+        folder.color_code = color_code or "#6c63ff"
     session.add(folder)
     session.commit()
     session.refresh(folder)
@@ -800,6 +806,7 @@ async def update_folder(
         "id": folder.id,
         "name": folder.name,
         "parent_id": folder.parent_id,
+        "color_code": folder.color_code,
         "created_at": folder.created_at,
     }
 

@@ -53,6 +53,7 @@
     .folder-item { display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:6px; cursor:pointer; font-size:0.875rem; color:#475569; user-select:none; }
     .folder-item:hover { background:#f1f5f9; }
     .folder-item.active { background:#ede9ff; color:#6c63ff; font-weight:600; }
+    .folder-item.drag-over { background:#eef2ff; }
     .folder-item .folder-arrow { width:12px; height:12px; flex-shrink:0; transition:transform .15s; }
     .folder-item .folder-arrow.open { transform:rotate(90deg); }
     .folder-children { padding-left:14px; }
@@ -235,6 +236,17 @@
               </svg>
             </button>
           </div>
+          <!-- Inline new-folder form -->
+          <div id="new-folder-form" class="hidden mt-2">
+            <div id="new-folder-parent" class="text-xs text-slate-400 mb-1">Parent: All recordings</div>
+            <div class="flex items-center gap-2">
+              <input id="new-folder-name" type="text" placeholder="New folder name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="new-folder-color" type="color" value="#6c63ff" title="Folder color" class="w-7 h-7 p-0 border-0 bg-transparent" />
+              <button id="new-folder-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="new-folder-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
+          </div>
           <!-- "All recordings" root item -->
           <div id="folder-all" class="folder-item active" onclick="selectFolder(null)">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -254,6 +266,28 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
               </svg>
             </button>
+          </div>
+          <!-- Inline new-tag form -->
+          <div id="new-tag-form" class="hidden mt-2">
+            <div class="flex items-center gap-2">
+              <input id="new-tag-name" type="text" placeholder="Tag name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="new-tag-color" type="color" value="#6c63ff" title="Pick a color"
+                class="w-7 h-7 p-0 border-0 bg-transparent" />
+              <button id="new-tag-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="new-tag-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
+          </div>
+          <!-- Inline tag edit form -->
+          <div id="edit-tag-form" class="hidden mt-2">
+            <div class="flex items-center gap-2">
+              <input id="edit-tag-name" type="text" placeholder="Tag name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="edit-tag-color" type="color" value="#6c63ff" title="Pick a color"
+                     class="w-10 h-10 p-0 border-0 bg-transparent" />
+              <button id="edit-tag-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="edit-tag-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
           </div>
           <div id="tag-list" class="flex flex-wrap gap-1.5"></div>
         </div>
@@ -1301,20 +1335,40 @@ function buildFolderNode(folder, all) {
 
   const item = document.createElement('div');
   item.className = 'folder-item' + (state.library.selectedFolderId === folder.id ? ' active' : '');
-  item.onclick = () => selectFolder(folder.id);
-  item.ondblclick = (e) => { e.stopPropagation(); renameFolderPrompt(folder); };
+  // store folder id on the DOM node for reliable matching
+  item.dataset.folderId = String(folder.id);
+  item.setAttribute('role','treeitem');
+  // click selects folder (ignore clicks on interactive subelements)
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.folder-arrow') || e.target.closest('.folder-rename') || e.target.closest('.popover') || e.target.closest('input') || e.target.closest('button')) return;
+    selectFolder(folder.id);
+  });
+  item.addEventListener('dblclick', (e) => { e.stopPropagation(); showInlineRenameFolder(folder); });
   item.title = 'Double-click to rename · Right-click for options';
-  item.oncontextmenu = (e) => { e.preventDefault(); showFolderMenu(e, folder); };
+  item.addEventListener('contextmenu', (e) => { e.preventDefault(); showFolderMenu(e, folder); });
+
+  // Drag & drop support: allow dropping recordings onto a folder
+  item.addEventListener('dragover', (e) => { e.preventDefault(); item.classList.add('drag-over'); });
+  item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+  item.addEventListener('drop', (e) => {
+    e.preventDefault(); item.classList.remove('drag-over');
+    const recId = e.dataTransfer.getData('text/plain');
+    if (recId) moveRecordingToFolder(recId, folder.id);
+  });
 
   const arrow = hasChildren
     ? `<svg class="folder-arrow w-3 h-3 shrink-0 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`
     : `<span class="w-3 shrink-0"></span>`;
 
+  // use server-provided color_code
+  const useColor = folder && folder.color_code;
+  const colorDot = useColor ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mr-2" style="background:${escHtml(folder.color_code)}"></span>` : '';
   item.innerHTML = `
     ${arrow}
     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
       <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
     </svg>
+    ${colorDot}
     <span class="flex-1 truncate">${escHtml(folder.name)}</span>
   `;
   wrapper.appendChild(item);
@@ -1338,17 +1392,16 @@ function buildFolderNode(folder, all) {
 function selectFolder(folderId) {
   state.library.selectedFolderId = folderId;
   state.library.selectedTagId = null;
-  // Update active state on folder items
+  // Update active state on folder items using the data attribute
   document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
   document.getElementById('folder-all').classList.toggle('active', !folderId);
   if (folderId) {
-    // find and mark active
     document.querySelectorAll('.folder-item').forEach(el => {
-      if (el.onclick && el.onclick.toString().includes(folderId)) el.classList.add('active');
+      if (el.dataset && String(el.dataset.folderId) === String(folderId)) el.classList.add('active');
     });
   }
   document.getElementById('library-folder-label').textContent =
-    folderId ? (state.library.folders.find(f => f.id === folderId)?.name || 'Folder') : 'All recordings';
+    folderId ? (state.library.folders.find(f => String(f.id) === String(folderId))?.name || 'Folder') : 'All recordings';
   fetchLibrary();
   if (state.activeTab !== 'library') switchTab('library');
 }
@@ -1362,35 +1415,81 @@ function showFolderMenu(e, folder) {
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
   menu.innerHTML = `
-    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="renameFolderPrompt(${JSON.stringify(folder).replace(/"/g,'&quot;')}); document.getElementById('folder-ctx-menu')?.remove()">Rename</button>
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('folder-ctx-menu')?.remove(); window.showInlineRenameFolder(${JSON.stringify(folder).replace(/"/g,'&quot;')}); })()">Rename</button>
     <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="deleteFolderConfirm('${folder.id}'); document.getElementById('folder-ctx-menu')?.remove()">Delete</button>
   `;
   document.body.appendChild(menu);
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
 }
 
-async function createFolder(name, parentId) {
+async function createFolder(name, parentId, color) {
   if (!name) return;
   const fd = new FormData();
   fd.append('name', name);
   if (parentId) fd.append('parent_id', parentId);
+  if (color) fd.append('color_code', color);
   try {
     const res = await fetch('/api/folders', { method: 'POST', body: fd });
     if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    const newFolder = await res.json().catch(() => null);
     await fetchFolders();
+    // ensure library view reflects new folder immediately
+    try { await fetchLibrary(); } catch (_) {}
   } catch (err) { alert(`Create folder failed: ${err.message}`); }
 }
 
-async function renameFolderPrompt(folder) {
-  const newName = prompt('Rename folder:', folder.name);
-  if (!newName || newName === folder.name) return;
-  const fd = new FormData();
-  fd.append('name', newName);
-  try {
-    const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd });
-    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
-    await fetchFolders();
-  } catch (err) { alert(`Rename failed: ${err.message}`); }
+function showInlineRenameFolder(folder) {
+  const item = document.querySelector(`[data-folder-id="${folder.id}"]`);
+  if (!item) {
+    // fallback to prompt
+    (async () => {
+      const newName = prompt('Rename folder:', folder.name);
+      if (!newName || newName === folder.name) return;
+      const fd = new FormData(); fd.append('name', newName);
+      try { const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd }); if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); } await fetchFolders(); } catch (err) { alert(`Rename failed: ${err.message}`); }
+    })();
+    return;
+  }
+  if (item.querySelector('.folder-rename-form')) return; // already editing
+
+  const nameSpan = item.querySelector('.flex-1');
+  const originalName = folder.name || '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'folder-rename-form flex items-center gap-2 ml-2';
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = originalName;
+  input.className = 'rounded border border-slate-200 px-2 py-1 text-sm focus:outline-none';
+  const color = document.createElement('input');
+  color.type = 'color';
+  color.value = folder.color_code || '#6c63ff';
+  color.className = 'w-8 h-8 p-0 border-0 bg-transparent';
+  color.title = 'Folder color';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'px-2 py-1 text-xs rounded bg-brand text-white'; saveBtn.textContent = 'Save';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'px-2 py-1 text-xs rounded bg-slate-100 text-slate-600'; cancelBtn.textContent = 'Cancel';
+
+    saveBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const newName = input.value.trim();
+    const newColor = color.value;
+    if (!newName) return;
+    try {
+      const fd = new FormData();
+      fd.append('name', newName);
+      fd.append('color_code', newColor || '#6c63ff');
+      const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd });
+      if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+      await fetchFolders();
+    } catch (err) { alert(`Rename failed: ${err.message}`); }
+    wrapper.remove();
+  });
+
+  cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); wrapper.remove(); });
+
+  wrapper.appendChild(input); wrapper.appendChild(color); wrapper.appendChild(saveBtn); wrapper.appendChild(cancelBtn);
+  item.appendChild(wrapper);
+  input.focus(); input.select();
 }
 
 async function deleteFolderConfirm(folderId) {
@@ -1422,11 +1521,14 @@ function renderTagSidebar() {
   state.library.tags.forEach(tag => {
     const pill = document.createElement('span');
     pill.className = 'tag-pill cursor-pointer' + (state.library.selectedTagId === tag.id ? ' ring-2 ring-offset-1 ring-slate-400' : '');
+    pill.dataset.tagId = tag.id;
+    pill.dataset.tagName = tag.name;
     pill.style.background = tag.color_code;
     pill.textContent = tag.name;
-    pill.title = 'Click to filter · Right-click to delete';
+    pill.title = 'Click to filter · Double-click to edit · Right-click for options';
     pill.onclick = () => filterByTag(tag.id, tag.name);
-    pill.oncontextmenu = (e) => { e.preventDefault(); deleteTagConfirm(tag); };
+    pill.ondblclick = (e) => { e.stopPropagation(); showTagEditForm(tag); };
+    pill.oncontextmenu = (e) => { e.preventDefault(); showTagMenu(e, tag); };
     list.appendChild(pill);
   });
 }
@@ -1461,18 +1563,102 @@ async function deleteTagConfirm(tag) {
   } catch (err) { alert(`Delete tag failed: ${err.message}`); }
 }
 
-async function createTagPrompt() {
-  const name = prompt('New tag name:');
+// Create a tag via API and refresh tags + library immediately
+async function createTag(name, color) {
   if (!name) return;
-  const color = prompt('Color (hex, e.g. #6c63ff):', '#6c63ff') || '#6c63ff';
   const fd = new FormData();
   fd.append('name', name);
-  fd.append('color_code', color);
+  fd.append('color_code', color || '#6c63ff');
   try {
     const res = await fetch('/api/tags', { method: 'POST', body: fd });
     if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
     await fetchTags();
+    // ensure library cards (popovers) get updated with the new tag list
+    try { await fetchLibrary(); } catch (_) {}
   } catch (err) { alert(`Create tag failed: ${err.message}`); }
+}
+
+let _editingTagId = null;
+function showTagEditForm(tag) {
+  _editingTagId = tag.id;
+  document.getElementById('edit-tag-form').classList.remove('hidden');
+  document.getElementById('edit-tag-name').value = tag.name;
+  document.getElementById('edit-tag-color').value = tag.color_code || '#6c63ff';
+  document.getElementById('edit-tag-name').focus();
+}
+
+function hideTagEditForm() {
+  _editingTagId = null;
+  document.getElementById('edit-tag-form').classList.add('hidden');
+  document.getElementById('edit-tag-name').value = '';
+  document.getElementById('edit-tag-color').value = '#6c63ff';
+}
+
+async function updateTag() {
+  if (!_editingTagId) return;
+  const name = document.getElementById('edit-tag-name').value.trim();
+  const color = document.getElementById('edit-tag-color').value;
+  if (!name) return;
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('color_code', color);
+  try {
+    const res = await fetch(`/api/tags/${_editingTagId}`, { method: 'PATCH', body: fd });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+    await fetchTags();
+    await fetchLibrary();
+    hideTagEditForm();
+  } catch (err) { alert(`Update tag failed: ${err.message}`); }
+}
+
+function showTagMenu(e, tag) {
+  document.getElementById('tag-ctx-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'tag-ctx-menu';
+  menu.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); window.showTagEditForm(${JSON.stringify(tag).replace(/"/g,'&quot;')}); })()">Rename / Color</button>
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); deleteTagConfirm(${JSON.stringify(tag).replace(/"/g,'&quot;')}); })()">Delete</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+}
+
+function showNewFolderForm() {
+  const form = document.getElementById('new-folder-form');
+  const parentLabel = document.getElementById('new-folder-parent');
+  const parentId = state.library.selectedFolderId;
+  parentLabel.textContent = 'Parent: ' + (parentId ? (state.library.folders.find(f => f.id === parentId)?.name || 'Folder') : 'All recordings');
+  form.classList.remove('hidden');
+  const input = document.getElementById('new-folder-name');
+  input.focus();
+  input.select();
+}
+
+function hideNewFolderForm() {
+  const form = document.getElementById('new-folder-form');
+  form.classList.add('hidden');
+  const input = document.getElementById('new-folder-name');
+  input.value = '';
+  const color = document.getElementById('new-folder-color');
+  if (color) color.value = '#6c63ff';
+}
+
+function showNewTagForm() {
+  const form = document.getElementById('new-tag-form');
+  form.classList.remove('hidden');
+  const input = document.getElementById('new-tag-name');
+  input.focus();
+  input.select();
+}
+
+function hideNewTagForm() {
+  const form = document.getElementById('new-tag-form');
+  form.classList.add('hidden');
+  document.getElementById('new-tag-name').value = '';
+  document.getElementById('new-tag-color').value = '#6c63ff';
 }
 
 // =========================================================================
@@ -1505,6 +1691,11 @@ function renderLibrary() {
     const card = document.createElement('div');
     card.className = 'rec-card';
     card.onclick = () => openRecording(rec);
+    // enable drag of recordings to folders
+    card.draggable = true;
+    card.addEventListener('dragstart', (e) => {
+      try { e.dataTransfer.setData('text/plain', rec.id); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+    });
 
     const statusColors = {
       done: 'bg-emerald-100 text-emerald-700',
@@ -1518,8 +1709,9 @@ function renderLibrary() {
     const statusCls = statusColors[rec.status] || 'bg-slate-100 text-slate-500';
 
     const assignedTagIds = new Set((rec.tags || []).map(t => t.id));
+    // include data attributes so tag clicks can be delegated reliably
     const tagPills = (rec.tags || []).map(t =>
-      `<span class="tag-pill" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>`
+      `<span class="tag-pill" data-tag-id="${escHtml(String(t.id))}" data-tag-name="${escHtml(t.name)}" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>`
     ).join('');
 
     // Folder selector options
@@ -1543,21 +1735,22 @@ function renderLibrary() {
 
     const dur = rec.duration ? fmtDur(rec.duration) : '—';
     const date = new Date(rec.created_at * 1000).toLocaleDateString();
+    const folderName = rec.folder_id ? (state.library.folders.find(f => f.id === rec.folder_id)?.name || '') : '';
 
     card.innerHTML = `
       <div class="flex items-start justify-between gap-3">
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold text-slate-800 truncate">${escHtml(rec.filename)}</p>
-          <p class="text-xs text-slate-400 mt-0.5">${date} · ${dur}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${date} · ${dur}${folderName ? ' · ' + escHtml(folderName) : ''}</p>
           ${tagPills ? `<div class="flex flex-wrap gap-1 mt-2">${tagPills}</div>` : ''}
         </div>
         <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
 
           <!-- Move to folder -->
           <div class="relative">
-            <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
-                    title="Move to folder"
-                    onclick="togglePopover(this)">
+                <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
+                  title="Move to folder"
+                  onclick="window.togglePopover(this)">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
               </svg>
@@ -1573,9 +1766,9 @@ function renderLibrary() {
 
           <!-- Assign tags -->
           <div class="relative">
-            <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
-                    title="Assign tags"
-                    onclick="togglePopover(this)">
+                <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
+                  title="Assign tags"
+                  onclick="window.togglePopover(this)">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 014-4z"/>
               </svg>
@@ -1842,12 +2035,42 @@ function initLibrary() {
   fetchFolders();
   fetchTags();
 
-  document.getElementById('new-folder-btn').addEventListener('click', () => {
-    const name = prompt('New folder name:');
-    if (name) createFolder(name, state.library.selectedFolderId);
+  // New-folder inline form handlers
+  document.getElementById('new-folder-btn').addEventListener('click', (e) => { e.stopPropagation(); showNewFolderForm(); });
+  document.getElementById('new-folder-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideNewFolderForm(); });
+  document.getElementById('new-folder-save').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const name = document.getElementById('new-folder-name').value.trim();
+    if (!name) return;
+    const color = document.getElementById('new-folder-color')?.value;
+    await createFolder(name, state.library.selectedFolderId, color);
+    hideNewFolderForm();
+  });
+  document.getElementById('new-folder-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('new-folder-save').click(); }
+    if (e.key === 'Escape') hideNewFolderForm();
   });
 
-  document.getElementById('new-tag-btn').addEventListener('click', createTagPrompt);
+  // New-tag inline form handlers
+  document.getElementById('new-tag-btn').addEventListener('click', (e) => { e.stopPropagation(); showNewTagForm(); });
+  document.getElementById('new-tag-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideNewTagForm(); });
+  document.getElementById('new-tag-save').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const name = document.getElementById('new-tag-name').value.trim();
+    const color = document.getElementById('new-tag-color').value;
+    if (!name) return;
+    await createTag(name, color);
+    hideNewTagForm();
+  });
+  document.getElementById('new-tag-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('new-tag-save').click(); }
+    if (e.key === 'Escape') hideNewTagForm();
+  });
+
+  // Edit-tag form handlers
+  document.getElementById('edit-tag-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideTagEditForm(); });
+  document.getElementById('edit-tag-save').addEventListener('click', async (e) => { e.stopPropagation(); await updateTag(); });
+  document.getElementById('edit-tag-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('edit-tag-save').click(); } if (e.key === 'Escape') hideTagEditForm(); });
 
   document.getElementById('lib-sort-select').addEventListener('change', e => {
     state.library.sort = e.target.value;
@@ -1860,6 +2083,46 @@ function initLibrary() {
     document.getElementById('lib-sort-desc-icon').classList.toggle('hidden', state.library.order !== 'desc');
     fetchLibrary();
   });
+
+  // Delegated folder clicks (ignore clicks on arrow, inputs, popovers)
+  const sidebarLib = document.getElementById('sidebar-library');
+  if (sidebarLib) {
+    sidebarLib.addEventListener('click', (e) => {
+      // if click is on the expand arrow or on interactive elements, ignore here
+      if (e.target.closest('.folder-arrow') || e.target.closest('.popover') || e.target.closest('input') || e.target.closest('button')) return;
+      const item = e.target.closest('.folder-item');
+      if (!item) return;
+      if (item.id === 'folder-all') selectFolder(null);
+      else if (item.dataset && item.dataset.folderId) selectFolder(item.dataset.folderId);
+    });
+
+    // allow dropping recordings on the root "All recordings"
+    const folderAll = document.getElementById('folder-all');
+    if (folderAll) {
+      folderAll.addEventListener('dragover', (e) => { e.preventDefault(); folderAll.classList.add('drag-over'); });
+      folderAll.addEventListener('dragleave', () => folderAll.classList.remove('drag-over'));
+      folderAll.addEventListener('drop', (e) => {
+        e.preventDefault(); folderAll.classList.remove('drag-over');
+        const recId = e.dataTransfer.getData('text/plain');
+        if (recId) moveRecordingToFolder(recId, '');
+      });
+    }
+  }
+
+  // Delegated tag clicks inside recording cards (capture phase to intercept before card click)
+  const libraryListEl = document.getElementById('library-list');
+  if (libraryListEl) {
+    libraryListEl.addEventListener('click', (e) => {
+      const pill = e.target.closest('.tag-pill');
+      if (!pill) return;
+      // ignore tag clicks coming from popover dropdowns (assign-tags UI)
+      if (pill.closest('.popover')) return;
+      e.stopPropagation();
+      const tagId = pill.dataset.tagId;
+      const tagName = pill.dataset.tagName || pill.textContent;
+      filterByTag(tagId, tagName);
+    }, true);
+  }
 
   initGlobalSearch();
 }

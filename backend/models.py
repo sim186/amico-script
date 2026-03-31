@@ -23,6 +23,7 @@ class Folder(SQLModel, table=True):
     name: str
     parent_id: Optional[str] = Field(default=None, foreign_key="folder.id")
     created_at: float = Field(default_factory=time.time)
+    color_code: str = Field(default="#6c63ff")
 
 
 # ---------------------------------------------------------------------------
