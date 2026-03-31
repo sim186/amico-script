@@ -2,6 +2,13 @@
 
 [![Build and Release](https://github.com/sim186/amico-script/actions/workflows/release.yml/badge.svg)](https://github.com/sim186/amico-script/actions/workflows/release.yml)
 
+## What's new (1.1.0)
+
+- 2026-03-31: Added a compact 10-color palette for tags/folders, per-folder
+  tag/recording counts, improved palette popovers, folder rename popovers, and
+  live accent preview while editing folder colors. See [CHANGELOG.md](CHANGELOG.md)
+  for details.
+
 Local-first audio transcription with speaker identification. Upload a recording, get a time-stamped, searchable transcript — all processed on your machine, nothing sent to the cloud.
 
 **Supports:** MP3, WAV, M4A, OGG, FLAC

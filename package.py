@@ -6,8 +6,7 @@ import PyInstaller.__main__
 def build():
     # Detect OS
     is_windows = sys.platform.startswith('win')
-    is_mac = sys.platform == 'darwin'
-    
+
     # Define paths
     root = os.path.dirname(os.path.abspath(__file__))
     dist = os.path.join(root, "dist")
@@ -41,29 +40,24 @@ def build():
         '--hidden-import=sse_starlette.sse',
     ]
 
-    if is_mac:
-        args.append('--windowed') # Create .app
-
-        # On Windows, create a version resource file for the executable
+    if is_windows:
         version_file_path = None
         try:
-                root_version = os.path.join(root, 'VERSION')
-                if os.path.exists(root_version):
-                        ver_text = open(root_version, 'r', encoding='utf-8').read().strip()
-                else:
-                        ver_text = '0.0.0'
-                ver_nums = ver_text.split('.')
-                while len(ver_nums) < 3:
-                        ver_nums.append('0')
-                filevers = tuple(int(x) if x.isdigit() else 0 for x in (ver_nums + ['0'])[:4])
+            root_version = os.path.join(root, 'VERSION')
+            if os.path.exists(root_version):
+                ver_text = open(root_version, 'r', encoding='utf-8').read().strip()
+            else:
+                ver_text = '0.0.0'
+            ver_nums = ver_text.split('.')
+            while len(ver_nums) < 3:
+                ver_nums.append('0')
+            filevers = tuple(int(x) if x.isdigit() else 0 for x in (ver_nums + ['0'])[:4])
 
-                if is_windows:
-                        # create a temporary version info python-style file consumed by PyInstaller
-                        build_meta_dir = os.path.join(root, 'buildmeta')
-                        os.makedirs(build_meta_dir, exist_ok=True)
-                        version_file_path = os.path.join(build_meta_dir, 'version_info.txt')
-                        with open(version_file_path, 'w', encoding='utf-8') as vf:
-                                vf.write('''# UTF-8
+            build_meta_dir = os.path.join(root, 'buildmeta')
+            os.makedirs(build_meta_dir, exist_ok=True)
+            version_file_path = os.path.join(build_meta_dir, 'version_info.txt')
+            with open(version_file_path, 'w', encoding='utf-8') as vf:
+                vf.write('''# UTF-8
 VSVersionInfo(
     ffi=FixedFileInfo(
         filevers=%s,
@@ -95,10 +89,11 @@ VSVersionInfo(
     ]
 )
 ''' % (str(filevers), str(filevers), ver_text, ver_text))
-                        args.append('--version-file=%s' % version_file_path)
+            args.append('--version-file=%s' % version_file_path)
         except Exception:
-                pass
-    
+            pass
+
+
     print("Starting build with PyInstaller...")
     PyInstaller.__main__.run(args)
     

@@ -44,6 +44,29 @@
     ::-webkit-scrollbar{width:5px}
     ::-webkit-scrollbar-track{background:#f1f5f9}
     ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+    /* edited segment indicator */
+    .segment.edited { border-left-color: #f59e0b; }
+    .segment-edited-badge { display:inline-block; font-size:10px; padding:0 4px; border-radius:3px; background:#fef3c7; color:#92400e; font-weight:600; margin-left:4px; vertical-align:middle; }
+    /* segment inline edit */
+    .segment-edit-area { width:100%; border:1px solid #6c63ff; border-radius:6px; padding:6px 8px; font-size:0.875rem; resize:vertical; min-height:56px; outline:none; font-family:inherit; }
+    /* folder tree */
+    .folder-item { display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:6px; cursor:pointer; font-size:0.875rem; color:#475569; user-select:none; }
+    .folder-item:hover { background:#f1f5f9; }
+    .folder-item.active { background:#ede9ff; color:#6c63ff; font-weight:600; }
+    .folder-item.drag-over { background:#eef2ff; }
+    .folder-item .folder-arrow { width:12px; height:12px; flex-shrink:0; transition:transform .15s; }
+    .folder-item .folder-arrow.open { transform:rotate(90deg); }
+    .folder-children { padding-left:14px; }
+    /* tag pills */
+    .tag-pill { display:inline-flex; align-items:center; gap:3px; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:600; color:#fff; cursor:pointer; }
+    /* recording card */
+    .rec-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; cursor:pointer; transition:border-color .12s, box-shadow .12s; }
+    .rec-card:hover { border-color:#a5b4fc; box-shadow:0 2px 8px 0 rgba(108,99,255,.08); }
+    /* global search dropdown */
+    .search-dropdown { position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.10); z-index:100; max-height:320px; overflow-y:auto; }
+    .search-dropdown-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; }
+    .search-dropdown-item:last-child { border-bottom:none; }
+    .search-dropdown-item:hover { background:#f8f7ff; }
   </style>
 </head>
 <body class="h-full bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden">
@@ -141,10 +164,25 @@
                 <span id="hf-saved-indicator" class="hidden ml-2 text-emerald-500 font-medium">Saved ✓</span>
               </p>
             </div>
-            <div>
-              <label for="num-speakers-input" class="block text-xs text-slate-500 mb-1">Number of speakers <span class="text-slate-400">(optional)</span></label>
-              <input type="number" id="num-speakers-input" min="1" max="20" placeholder="Auto"
-                     class="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            <div class="space-y-2">
+              <label class="block text-xs text-slate-500">Speakers <span class="text-slate-400">(optional)</span></label>
+              <div class="flex items-center gap-2">
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs text-slate-400">Exact</span>
+                  <input type="number" id="num-speakers-input" min="1" max="20" placeholder="Auto"
+                         class="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs text-slate-400">Min</span>
+                  <input type="number" id="min-speakers-input" min="1" max="20" placeholder="—"
+                         class="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs text-slate-400">Max</span>
+                  <input type="number" id="max-speakers-input" min="1" max="20" placeholder="—"
+                         class="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -186,6 +224,75 @@
 
       </div><!-- /sidebar-transcript -->
 
+      <!-- SIDEBAR: Library tab -->
+      <div id="sidebar-library" class="sidebar-panel">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Folders</h2>
+            <button id="new-folder-btn" title="New folder"
+                    class="text-slate-400 hover:text-brand transition focus:outline-none p-0.5 rounded">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+            </button>
+          </div>
+          <!-- Inline new-folder form -->
+          <div id="new-folder-form" class="hidden mt-2">
+            <div id="new-folder-parent" class="text-xs text-slate-400 mb-1">Parent: All recordings</div>
+            <div class="flex items-center gap-2">
+              <input id="new-folder-name" type="text" placeholder="New folder name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="new-folder-color" type="color" value="#6c63ff" title="Folder color" class="w-7 h-7 p-0 border-0 bg-transparent" />
+              <button id="new-folder-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="new-folder-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
+          </div>
+          <!-- "All recordings" root item -->
+          <div id="folder-all" class="folder-item active" onclick="selectFolder(null)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+            </svg>
+            <span class="flex-1">All recordings</span>
+          </div>
+          <div id="folder-tree" class="mt-0.5 space-y-0.5"></div>
+        </div>
+        <!-- Tags -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tags</h2>
+            <button id="new-tag-btn" title="New tag"
+                    class="text-slate-400 hover:text-brand transition focus:outline-none p-0.5 rounded">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+            </button>
+          </div>
+          <!-- Inline new-tag form -->
+          <div id="new-tag-form" class="hidden mt-2">
+            <div class="flex items-center gap-2">
+              <input id="new-tag-name" type="text" placeholder="Tag name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="new-tag-color" type="color" value="#6c63ff" title="Pick a color"
+                class="w-7 h-7 p-0 border-0 bg-transparent" />
+              <button id="new-tag-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="new-tag-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
+          </div>
+          <!-- Inline tag edit form -->
+          <div id="edit-tag-form" class="hidden mt-2">
+            <div class="flex items-center gap-2">
+              <input id="edit-tag-name" type="text" placeholder="Tag name"
+                     class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <input id="edit-tag-color" type="color" value="#6c63ff" title="Pick a color"
+                     class="w-10 h-10 p-0 border-0 bg-transparent" />
+              <button id="edit-tag-save" class="px-3 py-1 rounded-md bg-brand text-white text-sm font-semibold hover:bg-brand-hover focus:outline-none">Save</button>
+              <button id="edit-tag-cancel" class="px-3 py-1 rounded-md bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 focus:outline-none">Cancel</button>
+            </div>
+          </div>
+          <div id="tag-list" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div><!-- /sidebar-library -->
+
     </div><!-- /sidebar scroll -->
 
     <!-- Sidebar footer: app version -->
@@ -212,8 +319,24 @@
               aria-selected="false" role="tab" aria-controls="tab-transcript" disabled>
         Transcript
       </button>
+      <button id="tab-btn-library"
+              class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 -mb-px transition focus:outline-none"
+              aria-selected="false" role="tab" aria-controls="tab-library">
+        Library
+      </button>
+      <!-- Global search (always visible) -->
+      <div class="ml-auto flex items-center pb-2 pr-1 relative">
+        <div class="relative">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+          </svg>
+          <input id="global-search-input" type="search" placeholder="Search library…"
+                 class="w-44 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition" />
+          <div id="global-search-dropdown" class="search-dropdown hidden"></div>
+        </div>
+      </div>
       <!-- Export buttons (only visible on transcript tab) -->
-      <div id="export-bar" class="hidden ml-auto flex items-center gap-1.5 pb-2">
+      <div id="export-bar" class="hidden flex items-center gap-1.5 pb-2">
         <span class="text-xs text-slate-400 mr-1">Export</span>
         <button data-fmt="json" class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">JSON</button>
         <button data-fmt="srt"  class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">SRT</button>
@@ -343,6 +466,53 @@
         </div>
       </div><!-- /tab-transcript -->
 
+      <!-- ---------------------------------------------------------------
+           TAB: LIBRARY
+      --------------------------------------------------------------- -->
+      <div id="tab-library" class="tab-panel overflow-hidden" role="tabpanel">
+        <div class="flex flex-col h-full">
+          <!-- Library toolbar -->
+          <div class="px-6 py-3 bg-white border-b border-slate-100 shrink-0 flex items-center gap-3">
+            <span id="library-folder-label" class="text-sm font-semibold text-slate-700 flex-1">All recordings</span>
+            <div class="flex items-center gap-1.5 text-xs text-slate-500">
+              <label for="lib-sort-select">Sort</label>
+              <select id="lib-sort-select" class="rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand">
+                <option value="created_at">Date added</option>
+                <option value="filename">Name</option>
+                <option value="duration">Duration</option>
+              </select>
+              <button id="lib-sort-order" title="Toggle order"
+                      class="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition focus:outline-none">
+                <svg id="lib-sort-asc-icon" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9M3 12h5m10 4V4m0 0l-3 3m3-3l3 3"/>
+                </svg>
+                <svg id="lib-sort-desc-icon" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9M3 12h5m10-4V20m0 0l-3-3m3 3l3-3"/>
+                </svg>
+              </button>
+            </div>
+            <!-- Active tag filter chip -->
+            <div id="lib-tag-filter" class="hidden flex items-center gap-1.5 text-xs">
+              <span class="text-slate-400">Tag:</span>
+              <span id="lib-tag-filter-name" class="font-semibold text-slate-700"></span>
+              <button onclick="clearTagFilter()" class="text-slate-300 hover:text-red-400 transition">×</button>
+            </div>
+          </div>
+
+          <!-- Recording cards -->
+          <div class="flex-1 overflow-y-auto px-6 py-5">
+            <div id="library-empty" class="hidden text-center py-16 text-slate-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+              </svg>
+              <p class="text-sm font-medium">No recordings yet</p>
+              <p class="text-xs mt-1">Transcribed files will appear here</p>
+            </div>
+            <div id="library-list" class="space-y-2.5"></div>
+          </div>
+        </div>
+      </div><!-- /tab-library -->
+
     </div><!-- /tab panels -->
   </div><!-- /main panel -->
 
@@ -361,8 +531,11 @@ const state = {
   diarize: false,
   hfToken: '',
   numSpeakers: '',
+  minSpeakers: '',
+  maxSpeakers: '',
 
   jobId: null,
+  recordingId: null,       // recording_id returned by /api/transcribe
   jobStatus: null,
   jobProgress: 0,
   jobMessage: '',
@@ -376,7 +549,195 @@ const state = {
   searchQuery: '',
   filteredSegments: [],
   activeSpeakerFilter: null,
+
+  // Library mode — set when opening a recording from the library
+  activeRecordingId: null,
+
+  // Library data
+  library: {
+    recordings: [],
+    folders: [],
+    tags: [],
+    selectedFolderId: null,
+    selectedTagId: null,
+    sort: 'created_at',
+    order: 'desc',
+  },
 };
+
+// Color palette constant and helpers
+const PALETTE = ['#6c63ff','#f59e0b','#10b981','#f472b6','#60a5fa','#fb7185','#a78bfa','#fbbf24','#16a34a','#ef4444'];
+
+// Map of palette attachments: inputId -> {container, hidden, wrap}
+window.__paletteMap = window.__paletteMap || {};
+
+function attachPaletteToInput(inputId, sizePx = 28) {
+  const existing = document.getElementById(inputId);
+  if (!existing) return;
+  const currentVal = (existing.value || '#6c63ff').toLowerCase();
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.id = inputId;
+  hidden.value = currentVal;
+  hidden.name = existing.name || inputId;
+
+  // compact combobox button (shows current swatch + caret)
+  const container = document.createElement('div');
+  container.className = 'relative inline-block';
+  container.style.display = 'inline-block';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'flex items-center gap-1 p-0 border-0 bg-transparent focus:outline-none';
+  btn.style.padding = '0';
+  btn.style.background = 'transparent';
+
+  const sw = document.createElement('span');
+  sw.style.display = 'inline-block';
+  sw.style.width = sizePx + 'px';
+  sw.style.height = sizePx + 'px';
+  sw.style.borderRadius = '6px';
+  sw.style.background = currentVal;
+  sw.style.border = '1px solid rgba(0,0,0,0.06)';
+
+  const caret = document.createElement('span');
+  caret.className = 'text-slate-400';
+  caret.style.fontSize = '12px';
+  caret.style.lineHeight = '1';
+  caret.textContent = '▾';
+
+  btn.appendChild(sw);
+  btn.appendChild(caret);
+
+  // popover with palette grid (rendered as top-level overlay to avoid clipping)
+  const pop = document.createElement('div');
+  pop.className = 'bg-white border border-slate-200 rounded-lg shadow-lg p-2 grid gap-2';
+  pop.style.display = 'none';
+  pop.style.gridTemplateColumns = 'repeat(5, 1fr)';
+  pop.style.minWidth = '120px';
+  pop.style.maxWidth = '220px';
+  pop.style.boxSizing = 'border-box';
+  pop.style.position = 'absolute';
+  pop.style.zIndex = '10000';
+
+  PALETTE.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rounded-full border-2 border-transparent focus:outline-none';
+    b.style.width = (sizePx) + 'px';
+    b.style.height = (sizePx) + 'px';
+    b.style.background = c;
+    b.dataset.color = c.toLowerCase();
+    b.setAttribute('aria-label', `Color ${c}`);
+    if (c.toLowerCase() === currentVal) b.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pop.querySelectorAll('button').forEach(x => x.classList.remove('ring-2', 'ring-offset-1', 'ring-slate-400'));
+      b.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+      hidden.value = c;
+      try { hidden.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+      sw.style.background = c;
+      pop.style.display = 'none';
+    });
+    pop.appendChild(b);
+  });
+
+  // toggle popover — position it relative to the button but rendered in document.body
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (pop.style.display === 'none' || !pop.style.display) {
+      // ensure pop is in body so it's not clipped by overflow
+      if (!document.body.contains(pop)) document.body.appendChild(pop);
+      pop.style.display = 'grid';
+      // position
+      const rect = btn.getBoundingClientRect();
+      // temporarily make visible to measure width
+      pop.style.left = '0px'; pop.style.top = '0px';
+      const popW = Math.max(pop.offsetWidth || 160, 120);
+      const left = Math.min(Math.max(rect.right - popW + window.scrollX, 8 + window.scrollX), Math.max(window.innerWidth - popW - 8 + window.scrollX, 8 + window.scrollX));
+      const top = rect.bottom + 6 + window.scrollY;
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+
+      // close handlers
+      setTimeout(() => {
+        function closeHandler(ev) {
+          if (!container.contains(ev.target) && !pop.contains(ev.target)) {
+            pop.style.display = 'none';
+            document.removeEventListener('click', closeHandler);
+            window.removeEventListener('scroll', closeOnScroll);
+            window.removeEventListener('resize', closeOnScroll);
+          }
+        }
+        function closeOnScroll() { pop.style.display = 'none'; document.removeEventListener('click', closeHandler); window.removeEventListener('scroll', closeOnScroll); window.removeEventListener('resize', closeOnScroll); }
+        document.addEventListener('click', closeHandler);
+        window.addEventListener('scroll', closeOnScroll);
+        window.addEventListener('resize', closeOnScroll);
+      }, 0);
+    } else {
+      pop.style.display = 'none';
+    }
+  });
+
+  container.appendChild(hidden);
+  container.appendChild(btn);
+  // do not append pop as child — it's rendered at body level to avoid clipping
+  existing.replaceWith(container);
+  window.__paletteMap[inputId] = { container, hidden, btn, sw, pop };
+}
+
+function setPaletteValue(inputId, color) {
+  const rec = window.__paletteMap && window.__paletteMap[inputId];
+  if (!rec) {
+    const el = document.getElementById(inputId);
+    if (el) el.value = color;
+    return;
+  }
+  rec.hidden.value = color;
+  if (rec.sw) rec.sw.style.background = color;
+  if (rec.pop) {
+    rec.pop.querySelectorAll('button').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-slate-400'));
+    const match = Array.from(rec.pop.querySelectorAll('button')).find(b => (b.dataset.color || '').toLowerCase() === (color || '').toLowerCase());
+    if (match) match.classList.add('ring-2', 'ring-offset-1', 'ring-slate-400');
+    try { rec.hidden.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+  }
+}
+
+// Convert hex color to rgba string with given alpha (supports #RGB and #RRGGBB)
+function hexToRgba(hex, alpha) {
+  if (!hex) return null;
+  let h = String(hex).replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (h.length !== 6) return null;
+  const bigint = parseInt(h, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Apply a subtle accent to the library panel and the folder label when a folder is selected
+function setLibraryAccent(hex) {
+  const panel = document.getElementById('tab-library');
+  const label = document.getElementById('library-folder-label');
+  if (!panel || !label) return;
+  if (hex) {
+    const bg = hexToRgba(hex, 0.04) || '';
+    const hdr = hexToRgba(hex, 0.09) || '';
+    panel.style.backgroundColor = bg;
+    panel.style.transition = 'background-color 180ms ease';
+    // style header label gently
+    label.style.backgroundColor = hdr;
+    label.style.padding = '6px 10px';
+    label.style.borderRadius = '8px';
+    label.style.transition = 'background-color 180ms ease, padding 120ms ease';
+  } else {
+    panel.style.backgroundColor = '';
+    label.style.backgroundColor = '';
+    label.style.padding = '';
+    label.style.borderRadius = '';
+  }
+}
 
 
 // =========================================================================
@@ -419,12 +780,14 @@ function switchTab(name) {
   });
 
   document.getElementById('export-bar').classList.toggle('hidden', name !== 'transcript');
+  if (name === 'library') fetchLibrary();
 }
 
 document.getElementById('tab-btn-transcribe').addEventListener('click', () => switchTab('transcribe'));
 document.getElementById('tab-btn-transcript').addEventListener('click', () => {
   if (!document.getElementById('tab-btn-transcript').disabled) switchTab('transcript');
 });
+document.getElementById('tab-btn-library').addEventListener('click', () => switchTab('library'));
 
 // =========================================================================
 // Model cards
@@ -569,6 +932,14 @@ function initDiarizeToggle() {
   document.getElementById('num-speakers-input').addEventListener('input', e => {
     state.numSpeakers = e.target.value;
   });
+
+  document.getElementById('min-speakers-input').addEventListener('input', e => {
+    state.minSpeakers = e.target.value;
+  });
+
+  document.getElementById('max-speakers-input').addEventListener('input', e => {
+    state.maxSpeakers = e.target.value;
+  });
 }
 
 // =========================================================================
@@ -585,6 +956,8 @@ async function startTranscription() {
   fd.append('diarize', state.diarize ? 'true' : 'false');
   fd.append('hf_token', state.hfToken);
   fd.append('num_speakers', state.numSpeakers);
+  fd.append('min_speakers', state.minSpeakers);
+  fd.append('max_speakers', state.maxSpeakers);
 
   setProcessing(true);
 
@@ -594,8 +967,10 @@ async function startTranscription() {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Upload failed');
     }
-    const { job_id } = await res.json();
+    const { job_id, recording_id } = await res.json();
     state.jobId = job_id;
+    state.recordingId = recording_id || null;
+    state.activeRecordingId = null;
     document.getElementById('proc-filename').textContent = state.selectedFile.name;
     connectSSE(job_id);
   } catch (err) {
@@ -851,10 +1226,14 @@ async function promptRenameSpeaker(oldName) {
     fd.append('old_name', oldName);
     fd.append('new_name', newName);
 
-    const res = await fetch(`/api/jobs/${state.jobId}/rename-speaker`, {
-      method: 'POST',
-      body: fd,
-    });
+    let endpoint;
+    if (state.activeRecordingId) {
+      endpoint = `/api/recordings/${state.activeRecordingId}/transcript/rename-speaker`;
+    } else {
+      endpoint = `/api/jobs/${state.jobId}/rename-speaker`;
+    }
+
+    const res = await fetch(endpoint, { method: 'POST', body: fd });
     if (!res.ok) throw new Error('Failed to rename speaker');
 
     // Update local state
@@ -929,16 +1308,37 @@ function renderSegments(segments, query) {
       div.setAttribute('aria-current', 'true');
     }
 
+    if (seg.edited) {
+      div.classList.add('edited');
+    }
+
     const spkBadge = hasSpeakers && seg.speaker
       ? `<span class="text-xs font-semibold spk-text-${spkIdx} mr-2 cursor-pointer hover:underline" title="Rename speaker" onclick="event.stopPropagation(); promptRenameSpeaker('${escHtml(seg.speaker)}')">${escHtml(seg.speaker)}</span>`
       : '';
 
+    const editedBadge = seg.edited
+      ? `<span class="segment-edited-badge" title="This segment has been manually edited">edited</span>`
+      : '';
+
+    const editBtn = (state.activeRecordingId || state.recordingId)
+      ? `<button class="seg-edit-btn opacity-0 group-hover:opacity-100 ml-auto p-1 rounded text-slate-300 hover:text-brand transition focus:outline-none shrink-0"
+                 title="Edit segment text"
+                 onclick="event.stopPropagation(); openSegmentEdit(this, ${seg.id})">
+           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+             <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+           </svg>
+         </button>`
+      : '';
+
+    div.className += ' group';
     div.innerHTML = `
       <div class="flex items-baseline gap-1 mb-0.5">
         ${spkBadge}
         <span class="text-xs text-slate-400 font-mono">${fmtDur(seg.start)}</span>
+        ${editedBadge}
+        ${editBtn}
       </div>
-      <p class="text-sm text-slate-700 leading-relaxed">${highlightText(seg.text, q)}</p>
+      <p class="text-sm text-slate-700 leading-relaxed seg-text">${highlightText(seg.text, q)}</p>
     `;
     frag.appendChild(div);
   });
@@ -988,16 +1388,25 @@ function initAudioPlayer() {
 function initExportButtons() {
   document.querySelectorAll('.export-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!state.jobId) return;
       const fmt = btn.dataset.fmt;
+      let exportUrl, baseName;
+      if (state.activeRecordingId) {
+        exportUrl = `/api/recordings/${state.activeRecordingId}/export/${fmt}`;
+        baseName = (state.result?.filename || 'transcript').replace(/\.[^.]+$/, '');
+      } else if (state.jobId) {
+        exportUrl = `/api/jobs/${state.jobId}/export/${fmt}`;
+        baseName = (state.selectedFile?.name || 'transcript').replace(/\.[^.]+$/, '');
+      } else {
+        return;
+      }
       try {
-        const res = await fetch(`/api/jobs/${state.jobId}/export/${fmt}`);
+        const res = await fetch(exportUrl);
         if (!res.ok) throw new Error(await res.text());
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${(state.selectedFile?.name||'transcript').replace(/\.[^.]+$/,'')}.${fmt}`;
+        a.download = `${baseName}.${fmt}`;
         a.click();
         URL.revokeObjectURL(url);
       } catch (err) {
@@ -1073,6 +1482,961 @@ async function restoreSettings() {
 }
 
 // =========================================================================
+// === FOLDER TREE ===
+// =========================================================================
+async function fetchFolders() {
+  try {
+    const res = await fetch('/api/folders');
+    if (!res.ok) return;
+    state.library.folders = await res.json();
+    renderFolderTree();
+  } catch (_) {}
+}
+
+function renderFolderTree() {
+  const tree = document.getElementById('folder-tree');
+  const folders = state.library.folders;
+  // Build a tree from flat list
+  const roots = folders.filter(f => !f.parent_id);
+  tree.innerHTML = '';
+  roots.forEach(f => tree.appendChild(buildFolderNode(f, folders)));
+}
+
+function buildFolderNode(folder, all) {
+  const children = all.filter(f => f.parent_id === folder.id);
+  const hasChildren = children.length > 0;
+  const wrapper = document.createElement('div');
+
+  const item = document.createElement('div');
+  item.className = 'folder-item' + (state.library.selectedFolderId === folder.id ? ' active' : '');
+  // store folder id on the DOM node for reliable matching
+  item.dataset.folderId = String(folder.id);
+  item.setAttribute('role','treeitem');
+  // click selects folder (ignore clicks on interactive subelements)
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.folder-arrow') || e.target.closest('.folder-rename') || e.target.closest('.popover') || e.target.closest('input') || e.target.closest('button')) return;
+    selectFolder(folder.id);
+  });
+  item.addEventListener('dblclick', (e) => { e.stopPropagation(); showInlineRenameFolder(folder); });
+  item.title = 'Double-click to rename · Right-click for options';
+  item.addEventListener('contextmenu', (e) => { e.preventDefault(); showFolderMenu(e, folder); });
+
+  // Drag & drop support: allow dropping recordings onto a folder
+  item.addEventListener('dragover', (e) => { e.preventDefault(); item.classList.add('drag-over'); });
+  item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+  item.addEventListener('drop', (e) => {
+    e.preventDefault(); item.classList.remove('drag-over');
+    const recId = e.dataTransfer.getData('text/plain');
+    if (recId) moveRecordingToFolder(recId, folder.id);
+  });
+
+  const arrow = hasChildren
+    ? `<svg class="folder-arrow w-3 h-3 shrink-0 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`
+    : `<span class="w-3 shrink-0"></span>`;
+
+  // use server-provided color_code
+  const useColor = folder && folder.color_code;
+  const colorDot = useColor ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mr-2" style="background:${escHtml(folder.color_code)}"></span>` : '';
+  const countBadge = typeof folder.count !== 'undefined' ? `<span class="text-xs text-slate-400 ml-2">(${escHtml(String(folder.count))})</span>` : '';
+  item.innerHTML = `
+    ${arrow}
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+    </svg>
+    ${colorDot}
+    <span class="flex-1 truncate">${escHtml(folder.name)}</span>
+    ${countBadge}
+  `;
+  wrapper.appendChild(item);
+
+  if (hasChildren) {
+    const childContainer = document.createElement('div');
+    childContainer.className = 'folder-children';
+    children.forEach(c => childContainer.appendChild(buildFolderNode(c, all)));
+    wrapper.appendChild(childContainer);
+
+    item.querySelector('.folder-arrow')?.addEventListener('click', e => {
+      e.stopPropagation();
+      childContainer.classList.toggle('hidden');
+      item.querySelector('.folder-arrow')?.classList.toggle('open');
+    });
+  }
+
+  return wrapper;
+}
+
+function selectFolder(folderId) {
+  state.library.selectedFolderId = folderId;
+  state.library.selectedTagId = null;
+  // Update active state on folder items using the data attribute
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('folder-all').classList.toggle('active', !folderId);
+  if (folderId) {
+    document.querySelectorAll('.folder-item').forEach(el => {
+      if (el.dataset && String(el.dataset.folderId) === String(folderId)) el.classList.add('active');
+    });
+  }
+  const labelEl = document.getElementById('library-folder-label');
+  const folder = folderId ? state.library.folders.find(f => String(f.id) === String(folderId)) : null;
+  labelEl.textContent = folderId ? (folder?.name || 'Folder') : 'All recordings';
+  // Apply subtle background accent to the library panel and header
+  if (folder && folder.color_code) setLibraryAccent(folder.color_code);
+  else setLibraryAccent(null);
+
+  fetchLibrary();
+  // Refresh tag list counts when folder changes
+  fetchTags();
+  if (state.activeTab !== 'library') switchTab('library');
+}
+
+function showFolderMenu(e, folder) {
+  // Remove any existing menu
+  document.getElementById('folder-ctx-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'folder-ctx-menu';
+  menu.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('folder-ctx-menu')?.remove(); window.showInlineRenameFolder(${JSON.stringify(folder).replace(/"/g,'&quot;')}); })()">Rename</button>
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="deleteFolderConfirm('${folder.id}'); document.getElementById('folder-ctx-menu')?.remove()">Delete</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+}
+
+async function createFolder(name, parentId, color) {
+  if (!name) return;
+  const fd = new FormData();
+  fd.append('name', name);
+  if (parentId) fd.append('parent_id', parentId);
+  if (color) fd.append('color_code', color);
+  try {
+    const res = await fetch('/api/folders', { method: 'POST', body: fd });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    const newFolder = await res.json().catch(() => null);
+    await fetchFolders();
+    // ensure library view reflects new folder immediately
+    try { await fetchLibrary(); } catch (_) {}
+  } catch (err) { alert(`Create folder failed: ${err.message}`); }
+}
+
+function showInlineRenameFolder(folder) {
+  const item = document.querySelector(`[data-folder-id="${folder.id}"]`);
+  if (!item) {
+    // fallback to prompt
+    (async () => {
+      const newName = prompt('Rename folder:', folder.name);
+      if (!newName || newName === folder.name) return;
+      const fd = new FormData(); fd.append('name', newName);
+      try { const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd }); if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); } await fetchFolders(); } catch (err) { alert(`Rename failed: ${err.message}`); }
+    })();
+    return;
+  }
+
+  // avoid duplicate popovers
+  const popId = `folder-rename-pop-${folder.id}`;
+  if (document.getElementById(popId)) return;
+
+  const rect = item.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = popId;
+  pop.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg p-3';
+  pop.style.left = Math.max(8 + window.scrollX, rect.left + window.scrollX) + 'px';
+  pop.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+  pop.style.minWidth = '220px';
+  pop.style.boxSizing = 'border-box';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.value = folder.name || '';
+  nameInput.className = 'w-full rounded border border-slate-200 px-2 py-1 text-sm focus:outline-none mb-2';
+
+  const inlineId = `inline-folder-color-${folder.id}`;
+  const tmpInput = document.createElement('input');
+  tmpInput.type = 'hidden';
+  tmpInput.id = inlineId;
+  tmpInput.value = folder.color_code || '#6c63ff';
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center gap-2 justify-end mt-2';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'px-3 py-1 text-sm rounded bg-brand text-white'; saveBtn.textContent = 'Save';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'px-3 py-1 text-sm rounded bg-slate-100 text-slate-600'; cancelBtn.textContent = 'Cancel';
+
+  pop.appendChild(nameInput);
+  pop.appendChild(tmpInput);
+  pop.appendChild(btnRow);
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+
+  document.body.appendChild(pop);
+
+  // attach palette to hidden input now that it's in the document
+  attachPaletteToInput(inlineId, 20);
+
+  // live preview: update library accent as the user picks colors
+  const hiddenInputEl = document.getElementById(inlineId);
+  let _colorPreviewHandler = null;
+  if (hiddenInputEl) {
+    _colorPreviewHandler = (e) => { try { if (String(state.library.selectedFolderId) === String(folder.id)) setLibraryAccent(e.target.value); } catch (_) {} };
+    hiddenInputEl.addEventListener('input', _colorPreviewHandler);
+  }
+
+  // focus
+  nameInput.focus(); nameInput.select();
+
+  async function doSave() {
+    const newName = nameInput.value.trim();
+    const newColor = (document.getElementById(inlineId) && document.getElementById(inlineId).value) || '#6c63ff';
+    if (!newName) return;
+    try {
+      const fd = new FormData(); fd.append('name', newName); fd.append('color_code', newColor || '#6c63ff');
+      const res = await fetch(`/api/folders/${folder.id}`, { method: 'PATCH', body: fd });
+      if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+      // optimistic UI: apply accent immediately if we're editing the currently selected folder
+      try { if (String(state.library.selectedFolderId) === String(folder.id)) setLibraryAccent(newColor); } catch (_) {}
+      await fetchFolders();
+      fetchTags();
+    } catch (err) { alert(`Rename failed: ${err.message}`); }
+    if (hiddenInputEl && _colorPreviewHandler) hiddenInputEl.removeEventListener('input', _colorPreviewHandler);
+    pop.remove();
+  }
+
+  saveBtn.addEventListener('click', async (e) => { e.stopPropagation(); await doSave(); });
+  cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); if (hiddenInputEl && _colorPreviewHandler) hiddenInputEl.removeEventListener('input', _colorPreviewHandler); pop.remove(); });
+
+  // keyboard handlers
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+    if (e.key === 'Escape') { pop.remove(); }
+  });
+
+  // close on outside click
+  setTimeout(() => {
+    function closeHandler(ev) {
+      if (!pop.contains(ev.target) && !item.contains(ev.target)) pop.remove();
+    }
+    document.addEventListener('click', closeHandler, { once: true });
+  }, 0);
+}
+
+async function deleteFolderConfirm(folderId) {
+  if (!confirm('Delete folder? Recordings inside will be moved to All Recordings.')) return;
+  try {
+    const res = await fetch(`/api/folders/${folderId}`, { method: 'DELETE' });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    if (state.library.selectedFolderId === folderId) selectFolder(null);
+    await fetchFolders();
+    fetchLibrary();
+  } catch (err) { alert(`Delete folder failed: ${err.message}`); }
+}
+
+// =========================================================================
+// === TAGS ===
+// =========================================================================
+async function fetchTags() {
+  try {
+    const params = new URLSearchParams();
+    if (state.library.selectedFolderId) params.set('folder_id', state.library.selectedFolderId);
+    const res = await fetch('/api/tags' + (params.toString() ? ('?' + params.toString()) : ''));
+    if (!res.ok) return;
+    state.library.tags = await res.json();
+    renderTagSidebar();
+  } catch (_) {}
+}
+
+function renderTagSidebar() {
+  const list = document.getElementById('tag-list');
+  list.innerHTML = '';
+  state.library.tags.forEach(tag => {
+    const container = document.createElement('span');
+    container.className = 'inline-flex items-center gap-2';
+
+    const pill = document.createElement('span');
+    pill.className = 'tag-pill' + (state.library.selectedTagId === tag.id ? ' ring-2 ring-offset-1 ring-slate-400' : '');
+    pill.dataset.tagId = tag.id;
+    pill.dataset.tagName = tag.name;
+    pill.style.background = tag.color_code;
+    pill.textContent = tag.name;
+    pill.title = 'Click to filter · Double-click to edit · Right-click for options';
+
+    const count = typeof tag.count !== 'undefined' ? Number(tag.count) : null;
+    const disabled = state.library.selectedFolderId && (count === 0 || count === null);
+    if (disabled) {
+      pill.classList.add('opacity-40', 'cursor-not-allowed');
+      pill.onclick = (e) => { e.stopPropagation(); /* disabled */ };
+    } else {
+      pill.classList.add('cursor-pointer');
+      pill.onclick = () => filterByTag(tag.id, tag.name);
+    }
+    pill.ondblclick = (e) => { e.stopPropagation(); showTagEditForm(tag); };
+    pill.oncontextmenu = (e) => { e.preventDefault(); showTagMenu(e, tag); };
+
+    container.appendChild(pill);
+    if (count !== null) {
+      const badge = document.createElement('span');
+      badge.className = 'text-xs text-slate-400';
+      badge.textContent = count;
+      container.appendChild(badge);
+    }
+    list.appendChild(container);
+  });
+}
+
+function filterByTag(tagId, tagName) {
+  // Toggle behavior: clicking the active tag clears the filter
+  if (state.library.selectedTagId === tagId) {
+    clearTagFilter();
+    return;
+  }
+  state.library.selectedTagId = tagId;
+  renderTagSidebar();
+  const filterEl = document.getElementById('lib-tag-filter');
+  const filterName = document.getElementById('lib-tag-filter-name');
+  filterEl.classList.remove('hidden');
+  filterName.textContent = tagName;
+  fetchLibrary();
+  if (state.activeTab !== 'library') switchTab('library');
+}
+
+function clearTagFilter() {
+  state.library.selectedTagId = null;
+  renderTagSidebar();
+  document.getElementById('lib-tag-filter').classList.add('hidden');
+  fetchLibrary();
+}
+
+async function deleteTagConfirm(tag) {
+  if (!confirm(`Delete tag "${tag.name}"?`)) return;
+  try {
+    const res = await fetch(`/api/tags/${tag.id}`, { method: 'DELETE' });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    if (state.library.selectedTagId === tag.id) clearTagFilter();
+    await fetchTags();
+    fetchLibrary();
+  } catch (err) { alert(`Delete tag failed: ${err.message}`); }
+}
+
+// Create a tag via API and refresh tags + library immediately
+async function createTag(name, color) {
+  if (!name) return;
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('color_code', color || '#6c63ff');
+  try {
+    const res = await fetch('/api/tags', { method: 'POST', body: fd });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    await fetchTags();
+    // ensure library cards (popovers) get updated with the new tag list
+    try { await fetchLibrary(); } catch (_) {}
+  } catch (err) { alert(`Create tag failed: ${err.message}`); }
+}
+
+let _editingTagId = null;
+function showTagEditForm(tag) {
+  _editingTagId = tag.id;
+  document.getElementById('edit-tag-form').classList.remove('hidden');
+  document.getElementById('edit-tag-name').value = tag.name;
+  // update hidden input value and palette selection
+  const editColor = tag.color_code || '#6c63ff';
+  const editInput = document.getElementById('edit-tag-color');
+  if (editInput) editInput.value = editColor;
+  setPaletteValue('edit-tag-color', editColor);
+  document.getElementById('edit-tag-name').focus();
+}
+
+function hideTagEditForm() {
+  _editingTagId = null;
+  document.getElementById('edit-tag-form').classList.add('hidden');
+  document.getElementById('edit-tag-name').value = '';
+  if (document.getElementById('edit-tag-color')) document.getElementById('edit-tag-color').value = '#6c63ff';
+  setPaletteValue('edit-tag-color', '#6c63ff');
+}
+
+async function updateTag() {
+  if (!_editingTagId) return;
+  const name = document.getElementById('edit-tag-name').value.trim();
+  const color = document.getElementById('edit-tag-color').value;
+  if (!name) return;
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('color_code', color);
+  try {
+    const res = await fetch(`/api/tags/${_editingTagId}`, { method: 'PATCH', body: fd });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+    await fetchTags();
+    await fetchLibrary();
+    hideTagEditForm();
+  } catch (err) { alert(`Update tag failed: ${err.message}`); }
+}
+
+function showTagMenu(e, tag) {
+  document.getElementById('tag-ctx-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'tag-ctx-menu';
+  menu.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); window.showTagEditForm(${JSON.stringify(tag).replace(/"/g,'&quot;')}); })()">Rename / Color</button>
+    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); deleteTagConfirm(${JSON.stringify(tag).replace(/"/g,'&quot;')}); })()">Delete</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+}
+
+function showNewFolderForm() {
+  const form = document.getElementById('new-folder-form');
+  const parentLabel = document.getElementById('new-folder-parent');
+  const parentId = state.library.selectedFolderId;
+  parentLabel.textContent = 'Parent: ' + (parentId ? (state.library.folders.find(f => f.id === parentId)?.name || 'Folder') : 'All recordings');
+  form.classList.remove('hidden');
+  const input = document.getElementById('new-folder-name');
+  input.focus();
+  input.select();
+}
+
+function hideNewFolderForm() {
+  const form = document.getElementById('new-folder-form');
+  form.classList.add('hidden');
+  const input = document.getElementById('new-folder-name');
+  input.value = '';
+  if (document.getElementById('new-folder-color')) {
+    document.getElementById('new-folder-color').value = '#6c63ff';
+    setPaletteValue('new-folder-color', '#6c63ff');
+  }
+}
+
+function showNewTagForm() {
+  const form = document.getElementById('new-tag-form');
+  form.classList.remove('hidden');
+  const input = document.getElementById('new-tag-name');
+  input.focus();
+  input.select();
+}
+
+function hideNewTagForm() {
+  const form = document.getElementById('new-tag-form');
+  form.classList.add('hidden');
+  document.getElementById('new-tag-name').value = '';
+  if (document.getElementById('new-tag-color')) {
+    document.getElementById('new-tag-color').value = '#6c63ff';
+    setPaletteValue('new-tag-color', '#6c63ff');
+  }
+}
+
+// =========================================================================
+// === LIBRARY VIEW ===
+// =========================================================================
+async function fetchLibrary() {
+  const params = new URLSearchParams({ sort: state.library.sort, order: state.library.order, limit: '100' });
+  if (state.library.selectedFolderId) params.set('folder_id', state.library.selectedFolderId);
+  if (state.library.selectedTagId) params.set('tag_id', state.library.selectedTagId);
+  try {
+    const res = await fetch('/api/library?' + params);
+    if (!res.ok) return;
+    state.library.recordings = await res.json();
+    renderLibrary();
+  } catch (_) {}
+}
+
+function renderLibrary() {
+  const list = document.getElementById('library-list');
+  const empty = document.getElementById('library-empty');
+  const recs = state.library.recordings;
+  if (!recs.length) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = '';
+  recs.forEach(rec => {
+    const card = document.createElement('div');
+    card.className = 'rec-card';
+    card.onclick = () => openRecording(rec);
+    // enable drag of recordings to folders
+    card.draggable = true;
+    card.addEventListener('dragstart', (e) => {
+      try { e.dataTransfer.setData('text/plain', rec.id); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+    });
+
+    const statusColors = {
+      done: 'bg-emerald-100 text-emerald-700',
+      error: 'bg-red-100 text-red-600',
+      pending: 'bg-slate-100 text-slate-500',
+      queued: 'bg-amber-100 text-amber-700',
+      transcribing: 'bg-blue-100 text-blue-700',
+      diarizing: 'bg-purple-100 text-purple-700',
+      cancelled: 'bg-slate-100 text-slate-500',
+    };
+    const statusCls = statusColors[rec.status] || 'bg-slate-100 text-slate-500';
+
+    const assignedTagIds = new Set((rec.tags || []).map(t => t.id));
+    // include data attributes so tag clicks can be delegated reliably
+    const tagPills = (rec.tags || []).map(t =>
+      `<span class="tag-pill" data-tag-id="${escHtml(String(t.id))}" data-tag-name="${escHtml(t.name)}" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>`
+    ).join('');
+
+    // Folder selector options
+    const folderOptions = [
+      `<option value="">— No folder —</option>`,
+      ...state.library.folders.map(f =>
+        `<option value="${escHtml(f.id)}" ${rec.folder_id === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>`
+      ),
+    ].join('');
+
+    // Tag checkboxes for the dropdown
+    const tagCheckboxes = state.library.tags.length
+      ? state.library.tags.map(t => `
+          <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-xs rounded">
+            <input type="checkbox" ${assignedTagIds.has(t.id) ? 'checked' : ''}
+                   onchange="event.stopPropagation(); toggleRecordingTag('${rec.id}', '${t.id}', this.checked)"
+                   class="rounded border-slate-300 text-brand focus:ring-brand" />
+            <span class="tag-pill" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>
+          </label>`).join('')
+      : `<p class="px-3 py-2 text-xs text-slate-400">No tags yet — create one in the sidebar</p>`;
+
+    const dur = rec.duration ? fmtDur(rec.duration) : '—';
+    const date = new Date(rec.created_at * 1000).toLocaleDateString();
+    const folderName = rec.folder_id ? (state.library.folders.find(f => f.id === rec.folder_id)?.name || '') : '';
+
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800 truncate">${escHtml(rec.filename)}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${date} · ${dur}${folderName ? ' · ' + escHtml(folderName) : ''}</p>
+          ${tagPills ? `<div class="flex flex-wrap gap-1 mt-2">${tagPills}</div>` : ''}
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
+
+          <!-- Move to folder -->
+          <div class="relative">
+                <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
+                  title="Move to folder"
+                  onclick="window.togglePopover(this)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+              </svg>
+            </button>
+            <div class="popover hidden absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg p-2 min-w-[160px]">
+              <p class="text-xs text-slate-400 px-1 mb-1">Move to folder</p>
+              <select class="w-full text-xs rounded border border-slate-200 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand bg-white"
+                      onchange="moveRecordingToFolder('${rec.id}', this.value)">
+                ${folderOptions}
+              </select>
+            </div>
+          </div>
+
+          <!-- Assign tags -->
+          <div class="relative">
+                <button class="p-1.5 rounded-lg text-slate-300 hover:text-brand hover:bg-brand/5 transition focus:outline-none"
+                  title="Assign tags"
+                  onclick="window.togglePopover(this)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 014-4z"/>
+              </svg>
+            </button>
+            <div class="popover hidden absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+              <p class="text-xs text-slate-400 px-3 py-1">Assign tags</p>
+              ${tagCheckboxes}
+            </div>
+          </div>
+
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}">${rec.status}</span>
+          <button class="p-1.5 rounded-lg text-slate-300 hover:text-red-400 transition focus:outline-none"
+                  title="Delete recording"
+                  onclick="deleteRecordingConfirm('${rec.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function togglePopover(btn) {
+  const popover = btn.nextElementSibling;
+  const isOpen = !popover.classList.contains('hidden');
+  // Close all other open popovers
+  document.querySelectorAll('.popover').forEach(p => p.classList.add('hidden'));
+  if (!isOpen) {
+    popover.classList.remove('hidden');
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function close(e) {
+        if (!popover.contains(e.target) && e.target !== btn) {
+          popover.classList.add('hidden');
+          document.removeEventListener('click', close);
+        }
+      });
+    }, 0);
+  }
+}
+
+async function moveRecordingToFolder(recordingId, folderId) {
+  const fd = new FormData();
+  fd.append('folder_id', folderId);
+  try {
+    const res = await fetch(`/api/recordings/${recordingId}`, { method: 'PATCH', body: fd });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+    // Update local state without full refetch
+    const rec = state.library.recordings.find(r => r.id === recordingId);
+    if (rec) rec.folder_id = folderId || null;
+    // If we're viewing a specific folder, remove the card from the current view
+    if (state.library.selectedFolderId && state.library.selectedFolderId !== folderId) {
+      state.library.recordings = state.library.recordings.filter(r => r.id !== recordingId);
+    }
+    renderLibrary();
+    // Refresh folder/tag counts so badges/pills reflect the move
+    try { fetchFolders(); fetchTags(); } catch (_) {}
+    // Close any open popovers
+    document.querySelectorAll('.popover').forEach(p => p.classList.add('hidden'));
+  } catch (err) { alert(`Move failed: ${err.message}`); }
+}
+
+async function toggleRecordingTag(recordingId, tagId, add) {
+  try {
+    const method = add ? 'POST' : 'DELETE';
+    const res = await fetch(`/api/recordings/${recordingId}/tags/${tagId}`, { method });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': '+t.slice(0,200) : ''}`); }
+    // Update local state
+    const rec = state.library.recordings.find(r => r.id === recordingId);
+    if (rec) {
+      if (add) {
+        const tag = state.library.tags.find(t => t.id === tagId);
+        if (tag && !rec.tags.find(t => t.id === tagId)) rec.tags.push(tag);
+      } else {
+        rec.tags = rec.tags.filter(t => t.id !== tagId);
+      }
+    }
+    // Re-render only the tag pills on this card without rebuilding everything
+    fetchLibrary();
+    // Update tag counts (scoped counts) so sidebar badges stay accurate
+    try { fetchTags(); } catch (_) {}
+  } catch (err) { alert(`Tag update failed: ${err.message}`); }
+}
+
+async function openRecording(rec) {
+  if (rec.status !== 'done') {
+    alert(`This recording has status "${rec.status}" and cannot be opened yet.`);
+    return;
+  }
+  try {
+    const [trRes, audioRes] = await Promise.all([
+      fetch(`/api/recordings/${rec.id}/transcript`),
+      fetch(`/api/recordings/${rec.id}/audio`),
+    ]);
+    if (!trRes.ok) throw new Error('Transcript not found');
+
+    const trData = await trRes.json();
+    const audioBlob = await audioRes.blob();
+
+    state.activeRecordingId = rec.id;
+    state.jobId = null;
+    state.recordingId = rec.id;
+    const result = trData.json_data;
+    result.filename = rec.filename;
+    state.result = result;
+    state.audioUrl = URL.createObjectURL(audioBlob);
+    state.filteredSegments = result.segments;
+    state.activeSpeakerFilter = null;
+    state.currentSegmentId = null;
+    state.searchQuery = '';
+
+    renderResults();
+
+    const transcriptBtn = document.getElementById('tab-btn-transcript');
+    transcriptBtn.disabled = false;
+    switchTab('transcript');
+  } catch (err) {
+    alert(`Failed to open recording: ${err.message}`);
+  }
+}
+
+async function deleteRecordingConfirm(recordingId) {
+  if (!confirm('Permanently delete this recording and its transcript?')) return;
+  try {
+    const res = await fetch(`/api/recordings/${recordingId}`, { method: 'DELETE' });
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${t ? ': ' + t.slice(0,200) : ''}`); }
+    if (state.activeRecordingId === recordingId) {
+      state.activeRecordingId = null;
+      state.result = null;
+    }
+    fetchLibrary();
+  } catch (err) { alert(`Delete failed: ${err.message}`); }
+}
+
+// =========================================================================
+// === SEGMENT EDITING ===
+// =========================================================================
+function openSegmentEdit(btn, segmentIndex) {
+  const segDiv = btn.closest('.segment');
+  if (!segDiv) return;
+  const textEl = segDiv.querySelector('.seg-text');
+  if (!textEl) return;
+
+  // Already in edit mode?
+  if (segDiv.querySelector('.segment-edit-area')) return;
+
+  const currentText = state.result?.segments[segmentIndex]?.text || textEl.textContent;
+  const recordingId = state.activeRecordingId || state.recordingId;
+
+  const area = document.createElement('textarea');
+  area.className = 'segment-edit-area mt-2';
+  area.value = currentText;
+  area.rows = 3;
+  area.onclick = e => e.stopPropagation();
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'mt-1.5 px-3 py-1 text-xs font-semibold bg-brand text-white rounded-lg hover:bg-brand-hover transition focus:outline-none';
+  saveBtn.textContent = 'Save';
+  saveBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newText = area.value.trim();
+    if (!newText || !recordingId) { area.remove(); saveBtn.remove(); cancelBtn.remove(); return; }
+    try {
+      const fd = new FormData();
+      fd.append('text', newText);
+      const res = await fetch(`/api/recordings/${recordingId}/transcript/segments/${segmentIndex}`, {
+        method: 'PATCH',
+        body: fd,
+      });
+      if (!res.ok) throw new Error('Save failed');
+      // Update local state
+      if (state.result?.segments[segmentIndex]) {
+        state.result.segments[segmentIndex].text = newText;
+        state.result.segments[segmentIndex].edited = true;
+      }
+      area.remove(); saveBtn.remove(); cancelBtn.remove();
+      textEl.innerHTML = escHtml(newText);
+      segDiv.classList.add('edited');
+      // Add edited badge if not already present
+      if (!segDiv.querySelector('.segment-edited-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'segment-edited-badge';
+        badge.title = 'This segment has been manually edited';
+        badge.textContent = 'edited';
+        segDiv.querySelector('.flex.items-baseline')?.appendChild(badge);
+      }
+    } catch (err) { alert(`Save failed: ${err.message}`); }
+  };
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'mt-1.5 ml-1.5 px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition focus:outline-none';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = (e) => { e.stopPropagation(); area.remove(); saveBtn.remove(); cancelBtn.remove(); };
+
+  segDiv.appendChild(area);
+  segDiv.appendChild(saveBtn);
+  segDiv.appendChild(cancelBtn);
+  area.focus();
+  area.select();
+}
+
+// =========================================================================
+// === GLOBAL SEARCH ===
+// =========================================================================
+let _globalSearchTimer = null;
+
+function initGlobalSearch() {
+  const input = document.getElementById('global-search-input');
+  const dropdown = document.getElementById('global-search-dropdown');
+
+  input.addEventListener('input', () => {
+    clearTimeout(_globalSearchTimer);
+    const q = input.value.trim();
+    if (!q) { dropdown.classList.add('hidden'); dropdown.innerHTML = ''; return; }
+    _globalSearchTimer = setTimeout(() => runGlobalSearch(q), 300);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { dropdown.classList.add('hidden'); input.blur(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) {
+        doSearchToLibrary(q);
+        dropdown.classList.add('hidden');
+        input.blur();
+      }
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.classList.add('hidden');
+    }
+  });
+}
+
+async function runGlobalSearch(q) {
+  const dropdown = document.getElementById('global-search-dropdown');
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15`);
+    if (!res.ok) return;
+    const results = await res.json();
+    if (!results.length) {
+      dropdown.innerHTML = '<div class="search-dropdown-item text-xs text-slate-400">No results found</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    dropdown.innerHTML = '';
+    results.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'search-dropdown-item';
+      const dur = r.duration ? fmtDur(r.duration) : '';
+      item.innerHTML = `
+        <p class="text-xs font-semibold text-slate-700 truncate">${escHtml(r.filename)}</p>
+        <p class="text-xs text-slate-400 mt-0.5">${dur ? dur + ' · ' : ''}${r.snippet}</p>
+      `;
+      item.onclick = () => {
+        dropdown.classList.add('hidden');
+        document.getElementById('global-search-input').value = '';
+        const rec = { id: r.recording_id, filename: r.filename, status: 'done', duration: r.duration, tags: [] };
+        openRecording(rec);
+      };
+      dropdown.appendChild(item);
+    });
+    dropdown.classList.remove('hidden');
+  } catch (_) {}
+}
+
+// Perform a search and populate the library view with matching recordings
+async function doSearchToLibrary(q) {
+  if (!q) return;
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=100`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    // Fetch recording details in parallel
+    const recPromises = rows.map(r => fetch(`/api/recordings/${r.recording_id}`).then(rp => rp.ok ? rp.json() : null).catch(() => null));
+    const recs = (await Promise.all(recPromises)).filter(Boolean);
+    state.library.recordings = recs;
+    // clear folder/tag selection when doing a free-text search
+    state.library.selectedFolderId = null;
+    state.library.selectedTagId = null;
+    // refresh counts so sidebar badges update
+    try { fetchFolders(); fetchTags(); } catch (_) {}
+    renderLibrary();
+    if (state.activeTab !== 'library') switchTab('library');
+  } catch (err) {
+    console.error('Search to library failed', err);
+  }
+}
+
+// =========================================================================
+// === LIBRARY INIT ===
+// =========================================================================
+function initLibrary() {
+  fetchFolders();
+  fetchTags();
+
+  // Replace native color inputs with the fixed PALETTE UI (hidden input + palette buttons)
+  try {
+    attachPaletteToInput('new-folder-color', 28);
+    attachPaletteToInput('new-tag-color', 28);
+    attachPaletteToInput('edit-tag-color', 28);
+  } catch (e) { /* best-effort; continue if DOM differs */ }
+
+  // New-folder inline form handlers
+  document.getElementById('new-folder-btn').addEventListener('click', (e) => { e.stopPropagation(); showNewFolderForm(); });
+  document.getElementById('new-folder-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideNewFolderForm(); });
+  document.getElementById('new-folder-save').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const name = document.getElementById('new-folder-name').value.trim();
+    if (!name) return;
+    const color = document.getElementById('new-folder-color')?.value;
+    await createFolder(name, state.library.selectedFolderId, color);
+    hideNewFolderForm();
+  });
+  document.getElementById('new-folder-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('new-folder-save').click(); }
+    if (e.key === 'Escape') hideNewFolderForm();
+  });
+
+  // New-tag inline form handlers
+  document.getElementById('new-tag-btn').addEventListener('click', (e) => { e.stopPropagation(); showNewTagForm(); });
+  document.getElementById('new-tag-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideNewTagForm(); });
+  document.getElementById('new-tag-save').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const name = document.getElementById('new-tag-name').value.trim();
+    const color = document.getElementById('new-tag-color').value;
+    if (!name) return;
+    await createTag(name, color);
+    hideNewTagForm();
+  });
+  document.getElementById('new-tag-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('new-tag-save').click(); }
+    if (e.key === 'Escape') hideNewTagForm();
+  });
+
+  // Edit-tag form handlers
+  document.getElementById('edit-tag-cancel').addEventListener('click', (e) => { e.stopPropagation(); hideTagEditForm(); });
+  document.getElementById('edit-tag-save').addEventListener('click', async (e) => { e.stopPropagation(); await updateTag(); });
+  document.getElementById('edit-tag-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('edit-tag-save').click(); } if (e.key === 'Escape') hideTagEditForm(); });
+
+  document.getElementById('lib-sort-select').addEventListener('change', e => {
+    state.library.sort = e.target.value;
+    fetchLibrary();
+  });
+
+  document.getElementById('lib-sort-order').addEventListener('click', () => {
+    state.library.order = state.library.order === 'desc' ? 'asc' : 'desc';
+    document.getElementById('lib-sort-asc-icon').classList.toggle('hidden', state.library.order !== 'asc');
+    document.getElementById('lib-sort-desc-icon').classList.toggle('hidden', state.library.order !== 'desc');
+    fetchLibrary();
+  });
+
+  // Delegated folder clicks (ignore clicks on arrow, inputs, popovers)
+  const sidebarLib = document.getElementById('sidebar-library');
+  if (sidebarLib) {
+    sidebarLib.addEventListener('click', (e) => {
+      // if click is on the expand arrow or on interactive elements, ignore here
+      if (e.target.closest('.folder-arrow') || e.target.closest('.popover') || e.target.closest('input') || e.target.closest('button')) return;
+      const item = e.target.closest('.folder-item');
+      if (!item) return;
+      if (item.id === 'folder-all') selectFolder(null);
+      else if (item.dataset && item.dataset.folderId) selectFolder(item.dataset.folderId);
+    });
+
+    // allow dropping recordings on the root "All recordings"
+    const folderAll = document.getElementById('folder-all');
+    if (folderAll) {
+      folderAll.addEventListener('dragover', (e) => { e.preventDefault(); folderAll.classList.add('drag-over'); });
+      folderAll.addEventListener('dragleave', () => folderAll.classList.remove('drag-over'));
+      folderAll.addEventListener('drop', (e) => {
+        e.preventDefault(); folderAll.classList.remove('drag-over');
+        const recId = e.dataTransfer.getData('text/plain');
+        if (recId) moveRecordingToFolder(recId, '');
+      });
+    }
+  }
+
+  // Delegated tag clicks inside recording cards (capture phase to intercept before card click)
+  const libraryListEl = document.getElementById('library-list');
+  if (libraryListEl) {
+    libraryListEl.addEventListener('click', (e) => {
+      const pill = e.target.closest('.tag-pill');
+      if (!pill) return;
+      // ignore tag clicks coming from popover dropdowns (assign-tags UI)
+      if (pill.closest('.popover')) return;
+      e.stopPropagation();
+      const tagId = pill.dataset.tagId;
+      const tagName = pill.dataset.tagName || pill.textContent;
+      filterByTag(tagId, tagName);
+    }, true);
+  }
+
+  initGlobalSearch();
+}
+
+// =========================================================================
 // Init
 // =========================================================================
 function init() {
@@ -1096,6 +2460,8 @@ function init() {
   document.getElementById('new-btn').addEventListener('click', () => {
     state.result = null;
     state.jobId = null;
+    state.recordingId = null;
+    state.activeRecordingId = null;
     state.jobStatus = null;
     state.audioUrl = null;
     state.currentSegmentId = null;
@@ -1111,6 +2477,7 @@ function init() {
     state.searchQuery = e.target.value;
     applyFilters();
   });
+  initLibrary();
   // fetch and display application version
   fetchVersion();
 }

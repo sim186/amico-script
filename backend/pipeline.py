@@ -29,6 +29,66 @@ from shims import inject_torchcodec_shim
 
 
 # ---------------------------------------------------------------------------
+# DB sync helper
+# ---------------------------------------------------------------------------
+
+def _sync_job_to_db(job_id: str) -> None:
+    """Write terminal job state to the SQLite DB (called from the worker thread)."""
+    job = state.jobs.get(job_id)
+    if not job:
+        return
+    recording_id = job.get("recording_id")
+    if not recording_id:
+        return  # pre-v2 job or DB unavailable
+
+    try:
+        import json as _json
+        import time as _time
+        from db import new_session
+        from models import Recording, Transcript
+        from sqlmodel import select
+
+        with new_session() as session:
+            rec = session.get(Recording, recording_id)
+            if not rec:
+                return
+
+            rec.status = job.get("status", rec.status)
+            result = job.get("result")
+            if result:
+                rec.duration = result.get("duration")
+
+                # Create or replace the Transcript row.
+                existing = session.exec(
+                    select(Transcript).where(Transcript.recording_id == recording_id)
+                ).first()
+
+                full_text = " ".join(
+                    s.get("text", "") for s in result.get("segments", [])
+                )
+                json_data = _json.dumps(result)
+                now = _time.time()
+
+                if existing:
+                    existing.full_text = full_text
+                    existing.json_data = json_data
+                    existing.updated_at = now
+                    session.add(existing)
+                else:
+                    session.add(Transcript(
+                        recording_id=recording_id,
+                        full_text=full_text,
+                        json_data=json_data,
+                    ))
+
+            session.add(rec)
+            session.commit()
+
+    except Exception:
+        pass  # DB failure must never crash the transcription worker
+
+
+# ---------------------------------------------------------------------------
 # SSE / logging helpers
 # ---------------------------------------------------------------------------
 
@@ -201,15 +261,27 @@ def _is_missing_vad_asset_error(exc: Exception) -> bool:
 # ---------------------------------------------------------------------------
 
 def _assign_speaker(seg_start: float, seg_end: float, diarization) -> str:
-    """Return the speaker label whose diarization track maximally overlaps the segment."""
-    best_speaker = "SPEAKER_00"
+    """Return the speaker label whose diarization track maximally overlaps the segment.
+
+    When no turn overlaps (e.g. the segment falls in a gap between turns),
+    fall back to the nearest turn by time distance rather than always
+    returning SPEAKER_00.
+    """
+    best_speaker = None
     best_overlap = 0.0
+    best_dist = float("inf")
     for turn, _, speaker in diarization.itertracks(yield_label=True):
         overlap = max(0.0, min(seg_end, turn.end) - max(seg_start, turn.start))
         if overlap > best_overlap:
             best_overlap = overlap
             best_speaker = speaker
-    return best_speaker
+        elif best_overlap == 0.0:
+            # nearest-neighbour fallback: pick the closest turn boundary
+            dist = min(abs(seg_start - turn.end), abs(seg_end - turn.start))
+            if dist < best_dist:
+                best_dist = dist
+                best_speaker = speaker
+    return best_speaker or "SPEAKER_00"
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +478,7 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
                     stop_first_segment_watchdog.set()
                 if job["cancel_flag"].is_set():
                     _push_event(job_id, "cancelled", 0.0, "Cancelled.")
+                    _sync_job_to_db(job_id)
                     return
 
                 progress = 0.05 + 0.75 * min(seg.end / duration, 1.0)
@@ -456,9 +529,16 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
             # so both decode paths (Whisper + diarization) are identical.
             diarization_input = _convert_audio_for_diarization(job_id, file_path)
 
-            # Fix 2: forward the user's speaker-count hint to pyannote.
+            # Fix 2: forward the user's speaker-count hints to pyannote.
             num_speakers = opts.get("num_speakers")
-            diarization = pipeline(diarization_input, num_speakers=num_speakers)
+            min_speakers = opts.get("min_speakers")
+            max_speakers = opts.get("max_speakers")
+            diarization = pipeline(
+                diarization_input,
+                num_speakers=num_speakers,
+                min_speakers=min_speakers,
+                max_speakers=max_speakers,
+            )
 
             # pyannote >= 3.3 may return a wrapper object (DiarizeOutput,
             # Output, etc.) instead of a bare Annotation.  Rather than
@@ -515,6 +595,7 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
         }
         job["result"] = result
         _push_event(job_id, "done", 1.0, "Transcription complete.", data=result)
+        _sync_job_to_db(job_id)
         _append_job_log(job_id, "INFO", "Worker finished successfully.")
 
     except Exception as exc:  # noqa: BLE001
@@ -522,6 +603,7 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
         _append_job_log(job_id, "ERROR", f"Worker failed: {exc}")
         _append_job_log(job_id, "ERROR", traceback.format_exc())
         _push_event(job_id, "error", -1, str(exc))
+        _sync_job_to_db(job_id)
     finally:
         if stop_first_segment_watchdog is not None:
             stop_first_segment_watchdog.set()
