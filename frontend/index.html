@@ -3408,9 +3408,15 @@
 
     function initShortcuts() {
       window.addEventListener('keydown', e => {
-        // Ignore global shortcuts if focusing input or textarea
+        // Ignore global shortcuts when a text or form control has focus
         const active = document.activeElement;
-        if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.contentEditable === 'true') {
+        if (active && (
+          active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'SELECT' ||
+          active.tagName === 'BUTTON' ||
+          active.isContentEditable
+        )) {
           return;
         }
 
