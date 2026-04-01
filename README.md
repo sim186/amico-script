@@ -6,6 +6,8 @@ Local-first audio transcription with optional speaker identification. Upload a r
 
 - Supports: MP3, WAV, M4A, OGG, FLAC
 - Models: Whisper (tiny → large-v3)
+- Global Search: Live filtering for folders and tags
+- Keyboard Shortcuts: Real-time navigation and UI toggles
 - Export: JSON, SRT, TXT, Markdown
 
 Screenshots
