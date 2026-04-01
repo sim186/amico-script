@@ -27,7 +27,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt || true; fi
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
           pip install pyinstaller
         shell: bash
 

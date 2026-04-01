@@ -91,7 +91,6 @@ def main():
         "pyannote.audio",
         "torch",
         "torchaudio",
-        "uvicorn.streaming",
         "sse_starlette.sse",
     ]
     for h in hidden:

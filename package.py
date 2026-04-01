@@ -36,7 +36,6 @@ def build():
         '--collect-data=pyannote.audio',  # include telemetry/config.yaml and other package assets
         '--hidden-import=torch',
         '--hidden-import=torchaudio',
-        '--hidden-import=uvicorn.streaming', # Hidden dependency
         '--hidden-import=sse_starlette.sse',
     ]
 
@@ -70,21 +69,23 @@ VSVersionInfo(
         date=(0, 0)
     ),
     kids=[
-        StringFileInfo([
-            StringTable(
-                '040904b0',
-                [
-                    ('CompanyName', ''),
-                    ('FileDescription', 'AmicoScript'),
-                    ('FileVersion', '%s'),
-                    ('InternalName', 'AmicoScript'),
-                    ('LegalCopyright', ''),
-                    ('OriginalFilename', 'AmicoScript.exe'),
-                    ('ProductName', 'AmicoScript'),
-                    ('ProductVersion', '%s')
-                ]
-            )
-        ]),
+        StringFileInfo(
+            [
+                StringTable(
+                    '040904B0',
+                    [
+                        StringStruct('CompanyName', ''),
+                        StringStruct('FileDescription', 'AmicoScript'),
+                        StringStruct('FileVersion', '%s'),
+                        StringStruct('InternalName', 'AmicoScript'),
+                        StringStruct('LegalCopyright', ''),
+                        StringStruct('OriginalFilename', 'AmicoScript.exe'),
+                        StringStruct('ProductName', 'AmicoScript'),
+                        StringStruct('ProductVersion', '%s')
+                    ]
+                )
+            ]
+        ),
         VarFileInfo([VarStruct('Translation', [1033, 1200])])
     ]
 )
