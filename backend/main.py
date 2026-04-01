@@ -54,6 +54,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Req
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from sqlmodel import Session, select
 from sqlalchemy import func
 from sse_starlette.sse import EventSourceResponse
@@ -708,8 +709,14 @@ async def edit_segment(
     if segment_index < 0 or segment_index >= len(segments):
         raise HTTPException(400, f"Segment index {segment_index} out of range")
 
-    segments[segment_index]["text"] = text
-    segments[segment_index]["edited"] = True
+    seg = segments[segment_index]
+    
+    # Store original text if this is the first edit
+    if "original_text" not in seg:
+        seg["original_text"] = seg.get("text", "")
+
+    seg["text"] = text
+    seg["edited"] = True
 
     data["segments"] = segments
     tr.json_data = json.dumps(data)
@@ -719,6 +726,128 @@ async def edit_segment(
     session.add(tr)
     session.commit()
     return {"ok": True, "segment_index": segment_index}
+
+
+@app.post("/api/recordings/{recording_id}/transcript/segments/{segment_index}/reset")
+async def reset_segment(
+    recording_id: str,
+    segment_index: int,
+    session: Session = Depends(get_session),
+) -> dict:
+    tr = session.exec(
+        select(Transcript).where(Transcript.recording_id == recording_id)
+    ).first()
+    if not tr:
+        raise HTTPException(404, "Transcript not found")
+
+    data = json.loads(tr.json_data)
+    segments = data.get("segments", [])
+    if segment_index < 0 or segment_index >= len(segments):
+        raise HTTPException(400, f"Segment index {segment_index} out of range")
+
+    seg = segments[segment_index]
+    if "original_text" in seg:
+        seg["text"] = seg["original_text"]
+        # We keep original_text so user can "edit" again, but set edited to false
+        seg["edited"] = False
+    
+    data["segments"] = segments
+    tr.json_data = json.dumps(data)
+    tr.full_text = " ".join(s.get("text", "") for s in segments)
+    tr.updated_at = time.time()
+
+    session.add(tr)
+    session.commit()
+    return {"ok": True, "segment_index": segment_index, "text": seg["text"]}
+
+
+@app.post("/api/recordings/{recording_id}/transcript/segments/{segment_index}/translate")
+async def translate_segment_api(
+    recording_id: str,
+    segment_index: int,
+    session: Session = Depends(get_session),
+) -> dict:
+    from pipeline import _translate_audio_chunk
+    
+    rec = session.get(Recording, recording_id)
+    if not rec:
+        raise HTTPException(404, "Recording not found")
+        
+    tr = session.exec(
+        select(Transcript).where(Transcript.recording_id == recording_id)
+    ).first()
+    if not tr:
+        raise HTTPException(404, "Transcript not found")
+
+    data = json.loads(tr.json_data)
+    segments = data.get("segments", [])
+    if segment_index < 0 or segment_index >= len(segments):
+        raise HTTPException(400, f"Segment index {segment_index} out of range")
+
+    seg = segments[segment_index]
+    
+    # Run translation
+    opts = json.loads(rec.transcription_options or "{}")
+    model_name = opts.get("model", "small")
+    
+    translated_text = await run_in_threadpool(
+        _translate_audio_chunk,
+        rec.file_path, seg["start"], seg["end"], model_name
+    )
+    
+    seg["translation"] = translated_text
+    # Ensure the modified segments list is reflected in the stored JSON
+    data["segments"] = segments
+    
+    tr.json_data = json.dumps(data)
+    tr.updated_at = time.time()
+    session.add(tr)
+    session.commit()
+    
+    return {"ok": True, "translation": translated_text}
+
+
+@app.post("/api/recordings/{recording_id}/transcript/translate-all")
+async def translate_all_api(
+    recording_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    rec = session.get(Recording, recording_id)
+    if not rec:
+        raise HTTPException(404, "Recording not found")
+        
+    opts = json.loads(rec.transcription_options or "{}")
+    model_name = opts.get("model", "small")
+    
+    # Create background job
+    import uuid
+    job_id = str(uuid.uuid4())
+    
+    job: dict = {
+        "id": job_id,
+        "type": "translate",
+        "recording_id": recording_id,
+        "status": "queued",
+        "progress": 0.0,
+        "message": "Queued",
+        "file_path": rec.file_path, # Not strictly needed but kept for structure
+        "original_filename": rec.filename,
+        "options": {
+            "model": model_name,
+        },
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+        "sse_queue": asyncio.Queue(),
+        "cancel_flag": threading.Event(),
+        "logs": [],
+        "temp_files": [],
+    }
+    state.jobs[job_id] = job
+    _append_job_log(job_id, "INFO", f"Bulk translation job created for recording '{rec.filename}'")
+    state.JOB_QUEUE.put(job_id)
+    
+    return {"ok": True, "job_id": job_id}
 
 
 @app.post("/api/recordings/{recording_id}/transcript/rename-speaker")
@@ -1021,7 +1150,8 @@ def search_library(
     safe_limit = min(limit, 100)
 
     try:
-        rows = session.exec(
+        # FTS search for transcripts
+        fts_rows = session.exec(
             _text("""
                 SELECT t.recording_id,
                        snippet(transcript_fts, 0, '<mark>', '</mark>', '…', 20) AS snippet
@@ -1031,19 +1161,64 @@ def search_library(
                 ORDER BY rank
                 LIMIT :lim OFFSET :off
             """),
-            {"q": q, "lim": safe_limit, "off": offset},
+            params={"q": q, "lim": safe_limit, "off": offset},
         ).all()
-    except OperationalError:
-        # Malformed FTS query — fall back to plain LIKE.
-        rows = session.exec(
+        
+        # Metadata search for filenames, tags, and folders
+        meta_rows = session.exec(
             _text("""
-                SELECT id AS recording_id,
-                       substr(full_text, 1, 200) AS snippet
-                FROM transcript
-                WHERE full_text LIKE :q
+                SELECT DISTINCT r.id as recording_id,
+                       CASE 
+                         WHEN f.name LIKE :ql THEN 'Folder: ' || f.name
+                         WHEN t.name LIKE :ql THEN 'Tag: ' || t.name
+                         ELSE 'Title: ' || r.filename 
+                       END as snippet
+                FROM recording r
+                LEFT JOIN folder f ON r.folder_id = f.id
+                LEFT JOIN recordingtag rt ON r.id = rt.recording_id
+                LEFT JOIN tag t ON rt.tag_id = t.id
+                WHERE r.filename LIKE :ql
+                   OR f.name LIKE :ql
+                   OR t.name LIKE :ql
+                ORDER BY r.filename
                 LIMIT :lim OFFSET :off
             """),
-            {"q": f"%{q}%", "lim": safe_limit, "off": offset},
+            params={"ql": f"%{q}%", "lim": safe_limit, "off": offset},
+        ).all()
+        
+        # Combine results: FTS (relevance-ranked) first, then metadata-only matches.
+        fts_ids = {r.recording_id: r.snippet for r in fts_rows}
+        ordered = list(fts_rows)
+        for r in meta_rows:
+            if r.recording_id not in fts_ids:
+                ordered.append(r)
+        
+        rows = ordered[:safe_limit]
+
+    except OperationalError:
+        # Fallback to plain LIKE if FTS query is malformed or missing
+        rows = session.exec(
+            _text("""
+                SELECT DISTINCT r.id AS recording_id,
+                       CASE 
+                         WHEN f.name LIKE :ql THEN 'Folder: ' || f.name
+                         WHEN t.name LIKE :ql THEN 'Tag: ' || t.name
+                         WHEN r.filename LIKE :ql THEN 'Title: ' || r.filename
+                         ELSE COALESCE(substr(tr.full_text, 1, 100), 'Metadata match')
+                       END AS snippet
+                FROM recording r
+                LEFT JOIN transcript tr ON r.id = tr.recording_id
+                LEFT JOIN folder f ON r.folder_id = f.id
+                LEFT JOIN recordingtag rt ON r.id = rt.recording_id
+                LEFT JOIN tag t ON rt.tag_id = t.id
+                WHERE r.filename LIKE :ql
+                   OR tr.full_text LIKE :ql
+                   OR f.name LIKE :ql
+                   OR t.name LIKE :ql
+                ORDER BY r.filename
+                LIMIT :lim OFFSET :off
+            """),
+            params={"ql": f"%{q}%", "lim": safe_limit, "off": offset},
         ).all()
 
     results = []

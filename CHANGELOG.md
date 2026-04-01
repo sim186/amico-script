@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 This project adheres to Semantic Versioning (https://semver.org/) and the
 Keep a Changelog format.
 
+## [1.2.0] - 2026-04-01
+
+- UI: Global search with live filtering (folder and tag matches).
+- UI: Fixed keyboard shortcut overlay persistence on page refresh.
+- UI: Robust background translation job status tracking and cancellation.
+- Backend: Server-side Hugging Face token persistence for diarization models.
+- Backend: Switched to `torchaudio` pre-loading for speaker identification to avoid `torchcodec` compatibility issues.
+- Feature: Automated platform-specific FFmpeg download upon first application startup.
 
 ## [1.1.1] - 2026-04-01
 - Improve library color dropbox
