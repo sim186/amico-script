@@ -655,7 +655,7 @@ def _translate_audio_chunk(audio_path: str, start: float, end: float, model_name
 
     ffmpeg_bin = shutil.which("ffmpeg")
     if not ffmpeg_bin:
-        return "Error: ffmpeg not found"
+        raise RuntimeError("ffmpeg not found; cannot perform audio translation")
 
     chunk_path = str(Path(audio_path).with_name(f"chunk_{int(time.time())}_{round(start, 2)}.wav"))
     
