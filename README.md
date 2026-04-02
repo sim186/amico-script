@@ -7,8 +7,11 @@ Local-first audio transcription with optional speaker identification. Upload a r
 - Supports: MP3, WAV, M4A, OGG, FLAC
 - Models: Whisper (tiny → large-v3)
 - Global Search: Live filtering for folders and tags
+- Library to manage your own transcriptions, with tags and directories
 - Keyboard Shortcuts: Real-time navigation and UI toggles
 - Export: JSON, SRT, TXT, Markdown
+- Real-Time segments translation to English
+- Edit individual segments
 
 Screenshots
 
@@ -77,6 +80,8 @@ Architecture (brief)
 - Backend: Python + FastAPI; transcription runs in background threads for blocking model code.
 - Frontend: single `index.html` served by FastAPI; no build step required.
 - Storage: in-memory job state; temporary audio files cleaned up after 1 hour.
+
+More information at [documentation](docs/doc.md) page.
 
 GPU acceleration
 
