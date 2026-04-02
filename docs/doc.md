@@ -1,36 +1,140 @@
-# AmicoScript — Features & Notes
+# AmicoScript Documentation
 
-This document summarizes AmicoScript features, optional components, and tips.
+## Overview
 
-Features
+AmicoScript is a local-first audio transcription tool powered by Whisper.
 
-- Local-first transcription: audio is processed on your machine; nothing is sent to the cloud.
-- Model choices: supports Whisper models from tiny → large-v3 (selectable in UI).
-- Exports: JSON, SRT, TXT, and Markdown.
-- Speaker diarization: optional `pyannote` integration for speaker labels.
-- Web UI: single-file frontend (`frontend/index.html`) — no build step.
+It provides:
 
-Speaker diarization (detailed)
+- audio transcription
+- optional speaker diarization
+- transcript management and search
+- export in multiple formats
 
-1. Create or log in to a Hugging Face account.
-2. Accept gated model licenses for both `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0` on huggingface.co.
-3. Create a read-scoped access token (`hf_...`) at https://huggingface.co/settings/tokens.
-4. In AmicoScript settings, enable Speaker diarization and paste your token. The token is saved locally at `~/.amicoscript/settings.json`.
+---
 
-Packaging notes
+## Getting Started (Flow)
 
-- Standalone builds use PyInstaller via `python package.py` and will bundle required Python packages.
-- Diarization in standalone builds requires including `pyannote.audio` package data (the packaging script already attempts to collect these files).
+Typical usage:
 
-Developer tips
+1. Upload an audio file
+2. Start a transcription job
+3. Monitor progress
+4. Retrieve the result
+5. Export or edit the transcript
 
-- To run locally: use a Python 3.10+ venv and `pip install -r backend/requirements.txt`, then `python run.py`.
-- The backend serves the frontend and API on `http://localhost:8002` by default.
-- Temporary audio files are cleaned up automatically (about 1 hour).
+---
 
-Troubleshooting
+## API Reference
 
-- If diarization fails with `403 Client Error: Cannot access gated repo`, confirm both gated model pages were accepted.
-- If packaging complains about missing telemetry/config files from `pyannote`, rebuild with the packaging script after ensuring `pyannote` data is available.
+### Models
 
-For more, see the main README and CHANGELOG.md.
+**GET /api/models**
+
+Returns available Whisper models.
+
+---
+
+### Settings
+
+**GET /api/settings**  
+Retrieve saved settings (e.g., Hugging Face token)
+
+**POST /api/settings**  
+Save settings
+
+---
+
+### Transcription
+
+**POST /api/transcribe**
+
+Upload an audio file and start a transcription job.
+
+Response:
+
+```json
+{
+  "job_id": "string"
+}
+```
+
+---
+
+### Job Progress
+
+**GET /api/jobs/{id}/stream**
+
+Server-Sent Events (SSE) stream for real-time progress updates.
+
+---
+
+### Cancel Job
+
+**POST /api/jobs/{id}/cancel**
+
+Cancels a running transcription job.
+
+---
+
+### Job Result
+
+**GET /api/jobs/{id}/result**
+
+Returns the full transcription result in JSON format.
+
+---
+
+### Export
+
+**GET /api/jobs/{id}/export/{fmt}**
+
+Download transcript in one of the following formats:
+
+- json
+- srt
+- txt
+- md
+
+---
+
+## Speaker Diarization Setup
+
+Speaker diarization uses `pyannote` and requires:
+
+1. A Hugging Face account
+2. Acceptance of model licenses
+3. A valid `hf_` token
+
+Add your token via the settings endpoint or UI.
+
+---
+
+## Architecture
+
+- Backend: Python + FastAPI
+- Frontend: Static HTML served by FastAPI
+- Processing: Background threads for transcription
+
+### Storage
+
+- In-memory job state
+- Temporary audio files (auto-deleted after ~1 hour)
+
+---
+
+## GPU Support
+
+To enable GPU acceleration:
+
+1. Use a CUDA-enabled PyTorch base image
+2. Update the Dockerfile accordingly
+3. Enable GPU support in docker-compose
+
+---
+
+## Notes
+
+- All processing is local
+- No audio data is uploaded externally
+- Performance depends on hardware and selected model

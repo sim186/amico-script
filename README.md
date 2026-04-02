@@ -1,89 +1,114 @@
-# AmicoScript
+# AmicoScript — Local Audio Transcription Tool
 
-[![Build and Release](https://github.com/sim186/amico-script/actions/workflows/release.yml/badge.svg)](https://github.com/sim186/amico-script/actions/workflows/release.yml)
+![Demo](docs/images/demo.gif)
 
-Local-first audio transcription with optional speaker identification. Upload a recording and get a time-stamped, searchable transcript — all processing happens locally.
+Turn audio recordings into searchable transcripts — fully local, no cloud, no data leaks.
 
-- Supports: MP3, WAV, M4A, OGG, FLAC
-- Models: Whisper (tiny → large-v3)
-- Global Search: Live filtering for folders and tags
-- Library to manage your own transcriptions, with tags and directories
-- Keyboard Shortcuts: Real-time navigation and UI toggles
-- Export: JSON, SRT, TXT, Markdown
-- Real-Time segments translation to English
-- Edit individual segments
+AmicoScript is a local-first transcription tool built on Whisper.  
+Upload an audio file and get a time-stamped transcript with optional speaker identification — all processed on your machine.
 
-Screenshots
+---
 
-![AmicoScript UI](docs/images/amicoscript.png)
+## ✨ Why AmicoScript
 
-![AmicoScript diarization](docs/images/amicoscript-diarization.png)
+Most transcription tools:
 
-![AmicoScript library](docs/images/amicoscript-library.png)
+- require uploading your audio to the cloud
+- cost money or have limits
+- don’t give you control over your data
 
-Quick start — Docker (recommended)
+AmicoScript keeps everything local.
+
+→ Your audio never leaves your machine.
+
+---
+
+## 🚀 Features
+
+- 🎧 Transcribe audio (MP3, WAV, M4A, OGG, FLAC, ACC)
+- 🧠 Whisper models (tiny → large-v3)
+- 🗣️ Speaker diarization (who said what)
+- 🌍 Real-time translation to English
+- 🔍 Global search across transcripts
+- 🗂️ Organize with folders and tags
+- ✏️ Edit individual segments
+- 📤 Export to JSON, SRT, TXT, Markdown
+- ⌨️ Keyboard shortcuts for fast navigation
+
+---
+
+## ⚡ Example
+
+Upload a meeting recording → get a structured, time-stamped transcript you can search, edit, and export.
+
+---
+
+## 🖥️ Quick Start
+
+### Docker (recommended)
 
 ```bash
 docker compose up --build
 ```
 
-Open http://localhost:8002 in your browser.
+Then open: http://localhost:8002
 
-Quick start — local
+---
+
+### Local
 
 ```bash
-# Python 3.10+
 pip install -r backend/requirements.txt
 python run.py
 ```
 
-`run.py` downloads a platform-specific `ffmpeg` on first run. The frontend is served by FastAPI from `frontend/index.html`.
+`run.py` will download `ffmpeg` automatically on first run.
 
-Using a virtual environment (macOS / Linux)
+---
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-python run.py
-```
+## 🧪 Performance
 
-Standalone executable (macOS / Windows)
+Performance depends on your hardware (CPU/GPU) and selected model size.
 
-Build with PyInstaller (from repo root):
+- Larger models → better accuracy
+- Smaller models → faster processing
 
-```bash
-cd backend
-pip install -r requirements.txt
-pip install pyinstaller
-cd ..
-python package.py
-```
+Feedback and benchmarks are welcome.
 
-Speaker diarization (optional)
+---
 
-Speaker diarization uses `pyannote` and requires accepting gated model licenses on Hugging Face and supplying an `hf_` token. See `docs/doc.md` for full steps.
+## 🧩 Optional: Speaker Diarization
 
-API reference (selected)
+Uses `pyannote` and requires a Hugging Face token.
 
-- `GET /api/models` — list available Whisper models
-- `GET /api/settings` — read saved settings (HF token)
-- `POST /api/settings` — save settings
-- `POST /api/transcribe` — upload file, start job → `{job_id}`
-- `GET /api/jobs/{id}/stream` — SSE progress stream
-- `POST /api/jobs/{id}/cancel` — cancel job
-- `GET /api/jobs/{id}/result` — full JSON result
-- `GET /api/jobs/{id}/export/{fmt}` — download transcript (`json`, `srt`, `txt`, `md`)
+See full setup instructions in:
+docs/doc.md
 
-Architecture (brief)
+---
 
-- Backend: Python + FastAPI; transcription runs in background threads for blocking model code.
-- Frontend: single `index.html` served by FastAPI; no build step required.
-- Storage: in-memory job state; temporary audio files cleaned up after 1 hour.
+## 📚 Documentation
 
-More information at [documentation](docs/doc.md) page.
+Full documentation (API, setup, details):
 
-GPU acceleration
+[Documentation](docs/doc.md)
 
-Change the `Dockerfile` base image to a CUDA-enabled `pytorch` image and enable GPU in compose for GPU support.
+---
 
+## 🏗️ Architecture (brief)
+
+- Backend: Python + FastAPI
+- Frontend: Single HTML (no build step)
+- Processing: Background jobs
+- Storage: Temporary local files (auto-cleanup)
+
+---
+
+## 🤝 Contributing
+
+Feedback, issues, and contributions are welcome.
+
+---
+
+## ⭐ If you find this useful
+
+Give it a star — it helps a lot!
