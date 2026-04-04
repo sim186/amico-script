@@ -1,12 +1,14 @@
-# AmicoScript — Local Audio Transcription Tool
+<p align="center">
+  <img src="images/logo.svg" alt="AmicoScript Logo" width="64" />
+</p>
 
-![Demo](docs/images/demo.gif)
+# <p align="center">AmicoScript</p>
 
-## 📋 Description
+<p align="center"><strong>AmicoScript local audio transcription tool.</strong></p>
 
 **AmicoScript** is a privacy-focused, local-first transcription tool built on OpenAI's Whisper models. It allows you to transform audio recordings into structured, searchable transcripts without your data ever leaving your repository or machine. Whether you need speaker identification (diarization), translation, or simple subtitles, AmicoScript provides a fast, free, and secure alternative to cloud services.
 
----
+![Demo](images/demo.gif)
 
 ## ✨ Why AmicoScript
 
@@ -81,7 +83,7 @@ Feedback and benchmarks are welcome.
 Uses `pyannote` and requires a Hugging Face token.
 
 See full setup instructions in:
-docs/doc.md
+[Documentation](docs/doc.md)
 
 ---
 
