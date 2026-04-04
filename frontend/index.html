@@ -996,21 +996,6 @@
                 Cancel
               </button>
 
-              <div class="mt-5 text-left">
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Live log</span>
-                  <button id="refresh-log-btn" type="button"
-                    class="text-xs text-slate-500 hover:text-slate-700 transition focus:outline-none focus:ring-1 focus:ring-brand rounded px-1.5 py-0.5">
-                    Refresh
-                  </button>
-                  <button id="copy-log-btn" type="button"
-                    class="text-xs text-slate-500 hover:text-slate-700 transition focus:outline-none focus:ring-1 focus:ring-brand rounded px-1.5 py-0.5">
-                    Copy
-                  </button>
-                </div>
-                <pre id="proc-log"
-                  class="max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">No logs yet.</pre>
-              </div>
             </div>
           </div>
 
@@ -1791,6 +1776,8 @@
       const btn = document.getElementById('start-btn');
       btn.disabled = true;
       btn.textContent = 'Submitting\u2026';
+      resetJobLogs();
+      startLogPolling();
       await Promise.allSettled(pending.map(item => submitBatchItem(item)));
       // Button stays disabled while jobs are running; re-enabled via checkBatchComplete
     }
@@ -1850,6 +1837,7 @@
     function checkBatchComplete() {
       const terminal = ['done', 'error'];
       if (!state.batchQueue.every(i => terminal.includes(i.status))) return;
+      stopLogPolling();
 
       document.getElementById('batch-panel').classList.add('hidden');
       const summaryList = document.getElementById('batch-summary-list');
@@ -1918,10 +1906,22 @@
       renderJobLogs();
     }
 
+    function getActiveJobId() {
+      if (state.batchMode) {
+        const processing = state.batchQueue.find(i => i.status === 'processing');
+        if (processing?.jobId) return processing.jobId;
+        // Fall back to the most recently submitted job
+        const submitted = state.batchQueue.filter(i => i.jobId).slice(-1)[0];
+        return submitted?.jobId || null;
+      }
+      return state.jobId;
+    }
+
     async function refreshJobLogs() {
-      if (!state.jobId) return;
+      const jobId = getActiveJobId();
+      if (!jobId) return;
       try {
-        const res = await fetch(`/api/jobs/${state.jobId}/logs?limit=500`);
+        const res = await fetch(`/api/jobs/${jobId}/logs?limit=500`);
         if (!res.ok) return;
         const payload = await res.json();
         const lines = (payload.logs || []).map(formatJobLogEntry);
@@ -1936,6 +1936,7 @@
       stopLogPolling();
       refreshJobLogs();
       state.logPollTimer = setInterval(refreshJobLogs, 2000);
+      document.getElementById('console-activity-dot').classList.remove('hidden');
     }
 
     function stopLogPolling() {
@@ -1943,6 +1944,48 @@
         clearInterval(state.logPollTimer);
         state.logPollTimer = null;
       }
+      document.getElementById('console-activity-dot').classList.add('hidden');
+    }
+
+    function initConsole() {
+      const toggle = document.getElementById('console-toggle');
+      const body = document.getElementById('console-body');
+      const chevron = document.getElementById('console-chevron');
+      const actions = document.getElementById('console-actions');
+
+      function openConsole() {
+        body.classList.remove('hidden');
+        actions.classList.remove('hidden');
+        chevron.style.transform = 'rotate(180deg)';
+        toggle.setAttribute('aria-expanded', 'true');
+        // Scroll log to bottom when opening
+        const pre = document.getElementById('proc-log');
+        pre.scrollTop = pre.scrollHeight;
+      }
+
+      function closeConsole() {
+        body.classList.add('hidden');
+        actions.classList.add('hidden');
+        chevron.style.transform = '';
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        if (isOpen) closeConsole(); else openConsole();
+      });
+      toggle.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); }
+      });
+
+      document.getElementById('refresh-log-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        refreshJobLogs();
+      });
+      document.getElementById('copy-log-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        copyLogsToClipboard();
+      });
     }
 
     async function copyLogsToClipboard() {
@@ -3833,8 +3876,7 @@
         btn.textContent = 'Start transcription';
         clearFile();
       });
-      document.getElementById('refresh-log-btn').addEventListener('click', refreshJobLogs);
-      document.getElementById('copy-log-btn').addEventListener('click', copyLogsToClipboard);
+      initConsole();
 
       document.getElementById('new-btn').addEventListener('click', () => {
         state.result = null;
@@ -3975,6 +4017,44 @@
         <button id="entity-edit-cancel" class="entity-cancel" type="button">Cancel</button>
         <button id="entity-edit-save" class="entity-save" type="button">Save Changes</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       Fixed console panel (collapsed by default)
+  ==================================================================== -->
+  <div id="console-panel" class="fixed bottom-0 left-72 right-0 z-50 bg-slate-900 border-t border-slate-700 shadow-2xl">
+    <!-- Toggle bar — always visible -->
+    <div id="console-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="console-body"
+      class="flex items-center gap-2 px-4 h-9 cursor-pointer select-none hover:bg-slate-800 transition focus:outline-none focus:ring-inset focus:ring-1 focus:ring-brand">
+      <!-- Terminal icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Console</span>
+      <!-- Live activity dot -->
+      <span id="console-activity-dot" class="hidden w-1.5 h-1.5 rounded-full bg-brand animate-pulse shrink-0"></span>
+      <div class="flex-1"></div>
+      <!-- Action buttons (shown only when expanded) -->
+      <div id="console-actions" class="hidden flex items-center gap-1">
+        <button id="refresh-log-btn" type="button"
+          class="text-xs text-slate-500 hover:text-slate-300 transition focus:outline-none px-1.5 py-0.5 rounded">
+          Refresh
+        </button>
+        <button id="copy-log-btn" type="button"
+          class="text-xs text-slate-500 hover:text-slate-300 transition focus:outline-none px-1.5 py-0.5 rounded">
+          Copy
+        </button>
+      </div>
+      <!-- Chevron -->
+      <svg id="console-chevron" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+      </svg>
+    </div>
+    <!-- Log body -->
+    <div id="console-body" class="hidden">
+      <pre id="proc-log"
+        class="h-48 overflow-y-auto px-4 py-3 text-[11px] leading-relaxed font-mono text-slate-300 whitespace-pre-wrap bg-slate-900">No logs yet.</pre>
     </div>
   </div>
 

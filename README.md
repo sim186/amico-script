@@ -26,7 +26,8 @@ AmicoScript keeps everything local.
 
 ## 🚀 Features
 
-- 🎧 Transcribe audio (MP3, WAV, M4A, OGG, FLAC, ACC)
+- 🎧 Transcribe audio (MP3, WAV, M4A, OGG, FLAC, ACC, MP4, MOV, MKV)
+- 📚 Batch process multiple files at once
 - 🧠 Whisper models (tiny → large-v3)
 - 🗣️ Speaker diarization (who said what)
 - 🌍 Real-time translation to English
