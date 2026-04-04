@@ -17,7 +17,7 @@ It provides:
 
 Typical usage:
 
-1. Upload an audio file
+1. Upload an audio file (or batch of files)
 2. Start a transcription job
 3. Monitor progress
 4. Retrieve the result
