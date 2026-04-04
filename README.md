@@ -36,6 +36,7 @@ AmicoScript keeps everything local.
 - ✏️ Edit individual segments
 - 📤 Export to JSON, SRT, TXT, Markdown
 - ⌨️ Keyboard shortcuts for fast navigation
+- 🚀 For Mac, Windows, Docker, or local Python
 
 ---
 
@@ -63,6 +64,15 @@ Then open: http://localhost:8002
 pip install -r backend/requirements.txt
 python run.py
 ```
+
+### macOS: Running unsigned apps (Not disabling Gatekeeper)
+
+1. Download the latest release from the Releases page.
+2. Because the app is not signed by Apple, macOS will initially block it. Open System Settings → Privacy & Security and enable "App Store and identified developers" (allow apps downloaded from App Store and identified developers).
+3. Unzip the downloaded file. Double-click the application file (`AmicoScript.app`). macOS will prevent it from opening because it's from an unidentified developer.
+4. In System Settings → Privacy & Security, click the "Open Anyway" button next to the blocked app, then confirm when prompted to allow the application to run.
+5. The app will launch — you're ready to create icns files from PNG, JPG, or other image formats.
+
 
 `run.py` will download `ffmpeg` automatically on first run.
 

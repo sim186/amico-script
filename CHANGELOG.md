@@ -9,6 +9,7 @@ Keep a Changelog format.
 - UI: Moved the console log to a collapsible bottom panel with timestamps (hidden by default).
 - Backend: Added the possibility to upload multiple files at once.
 - Backend: Added support for video files by extracting audio with `ffmpeg` before transcription.
+- Release: Added support for MacOS (make sure to disable Gatekeeper for the app on first launch: `xattr -d com.apple.quarantine /path/to/app`).
 
 ## [1.2.0] - 2026-04-01
 
