@@ -10,6 +10,8 @@
 
 ![Demo](images/demo.gif)
 
+AmicoScript is perfect for journalists, researchers, students, or anyone who wants control over their audio data and transcripts. It supports batch processing, multiple export formats, and optional AI analysis features — all running locally on your hardware.
+
 ## ✨ Why AmicoScript
 
 Most transcription tools:
@@ -29,6 +31,8 @@ AmicoScript keeps everything local.
 - 🎧 Transcribe audio and video (MP3, WAV, M4A, OGG, FLAC, ACC, MP4, MOV, MKV)
 - 📚 Batch process multiple files at once
 - 🧠 Whisper models (tiny → large-v3)
+- 🤖 AI analysis (summary, action items, translation, custom prompts)
+- 🧠 LLM integration: configure local LLMs (Ollama or similar) from the UI
 - 🗣️ Speaker diarization (who said what)
 - 🌍 Real-time translation to English
 - 🔍 Global search across transcripts
@@ -95,6 +99,17 @@ Uses `pyannote` and requires a Hugging Face token.
 
 See full setup instructions in:
 [Documentation](docs/doc.md)
+
+## 🤖 AI Analysis & LLM
+
+New in 1.4: AmicoScript can call a local LLM to produce analyses from transcripts — summaries, action-item extraction, full translations, or custom-prompt runs. Key notes:
+
+- Configure the LLM base URL, model name, and optional API key from the app sidebar (`LLM Settings`). The default base URL is `http://localhost:11434` (Ollama-style API).
+- You can test the connection from the UI or via the backend endpoint `POST /api/llm/test-connection`.
+- List available models with `GET /api/llm/models` and trigger a model pull via `POST /api/llm/models/pull` (useful for Ollama pulls).
+- Per-recording analyses are created with `POST /api/recordings/{recording_id}/analyses` and queried with `GET /api/recordings/{recording_id}/analyses`.
+
+Docker tip: if your LLM runs outside the container, use `host.docker.internal` instead of `localhost` for the LLM base URL when running the app in Docker.
 
 ---
 

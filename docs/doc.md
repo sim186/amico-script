@@ -138,3 +138,129 @@ To enable GPU acceleration:
 - All processing is local
 - No audio data is uploaded externally
 - Performance depends on hardware and selected model
+
+## AI Analysis & LLM Integration (New in 1.4)
+
+AmicoScript can now call a locally hosted LLM (e.g. Ollama or any service implementing a compatible /v1/chat/completions API) to produce higher-level analyses from transcripts. This includes:
+
+- Summaries: concise meeting summaries highlighting topics and decisions.
+- Action items: extracted tasks, owners, and deadlines where present.
+- Translations: translate the full transcript into a target language using the LLM.
+- Custom prompts: run arbitrary instructions against the transcript.
+
+### Setting Up Ollama (LLM Runtime)
+
+To use the AI analysis features, you need a compatible LLM service running locally. **Ollama** is the easiest option and is free.
+
+#### Installation
+
+**macOS:**
+1. Download from [ollama.com](https://ollama.com)
+2. Move **Ollama.app** to `/Applications` and run it
+3. The Ollama service will start automatically in the background
+
+**Windows:**
+1. Download the installer from [ollama.com](https://ollama.com)
+2. Run the installer and follow the prompts
+3. Ollama runs as a background service automatically
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+Then start the service:
+```bash
+ollama serve
+```
+
+#### Getting a Model
+
+Once Ollama is running, pull a model to download it locally:
+
+```bash
+ollama pull mistral      # Fast, good for summaries
+ollama pull neural-chat  # Smaller, lighter weight
+ollama pull llama2       # More capable, larger (~4GB)
+```
+
+First pull takes time (model download), but subsequent loads are instant.
+
+#### Confirming Ollama Works
+
+Check that Ollama is running at `http://localhost:11434`:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+You should see a JSON list of your downloaded models.
+
+#### Configuring AmicoScript
+
+1. Open AmicoScript and go to **LLM Settings** (sidebar)
+2. Set:
+   - **Base URL:** `http://localhost:11434` (default)
+   - **Model Name:** your chosen model (e.g., `mistral`)
+   - **API Key:** leave blank (Ollama doesn't require one)
+3. Click **Test Connection** to verify
+
+Done! You can now use AI analysis features.
+
+#### Docker Note
+
+If running AmicoScript in Docker and Ollama on your host machine, use `http://host.docker.internal:11434` as the base URL instead.
+
+---
+
+Key implementation notes
+
+- Settings: LLM configuration is persisted to the same settings store used for HF tokens. The UI exposes a `LLM Settings` panel (base URL, model name, API key).
+- Backend endpoints:
+  - `GET /api/llm/settings` — returns the current LLM configuration.
+  - `POST /api/llm/settings` — save LLM settings (`llm_base_url`, `llm_model_name`, `llm_api_key`).
+  - `POST /api/llm/test-connection` — quick connectivity test to the configured LLM.
+  - `GET /api/llm/models` — list models exposed by the LLM server (if supported).
+  - `POST /api/llm/models/pull` — fire-and-forget model pull (useful for Ollama's `/api/pull`).
+  - `POST /api/recordings/{recording_id}/analyses` — create a new analysis job for a recording.
+  - `GET /api/recordings/{recording_id}/analyses` — list past analyses for a recording.
+  - `GET /api/recordings/{recording_id}/analyses/{analysis_id}` — fetch a specific analysis result.
+
+Streaming and SSE
+
+Analyses execute as background jobs and stream incremental results to the client via the existing SSE job stream: `GET /api/jobs/{job_id}/stream`. The frontend subscribes to that stream and appends partial deltas as they arrive.
+
+Example: start an analysis (curl)
+
+```bash
+curl -X POST "http://localhost:8002/api/recordings/<RECORDING_ID>/analyses" \
+  -F analysis_type=summary \
+  -F output_language=English
+```
+
+Example: test LLM connection (curl)
+
+```bash
+curl -X POST "http://localhost:8002/api/llm/test-connection"
+```
+
+Notes & references
+
+- Ollama HTTP API (example server): https://docs.ollama.com/
+- SSE (EventSource) streaming pattern: https://developer.mozilla.org/en-US/docs/Web/API/EventSource
+- Settings location on disk: `~/.amicoscript/settings.json` (contains `llm_base_url`, `llm_model_name`, `llm_api_key`, `hf_token`, etc.)
+
+Docker tip: when running the app in Docker and your LLM server runs on the host, use `http://host.docker.internal:11434` as the base URL.
+
+Running tests
+
+Install `pytest` (if not already installed):
+
+```bash
+python -m pip install pytest
+```
+
+Run the test suite:
+
+```bash
+pytest -q
+```
