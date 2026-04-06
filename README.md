@@ -10,7 +10,7 @@
 
 ![Demo](images/demo.gif)
 
-Amicoscript is perfect for journalists, researchers, students, or anyone who wants control over their audio data and transcripts. It supports batch processing, multiple export formats, and optional AI analysis features — all running locally on your hardware.
+AmicoScript is perfect for journalists, researchers, students, or anyone who wants control over their audio data and transcripts. It supports batch processing, multiple export formats, and optional AI analysis features — all running locally on your hardware.
 
 ## ✨ Why AmicoScript
 
