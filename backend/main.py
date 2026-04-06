@@ -386,6 +386,25 @@ async def create_analysis(
     if not cfg["llm_model_name"]:
         raise HTTPException(400, "No LLM model configured. Set it in AI Analysis settings.")
 
+    analysis_type = analysis_type.strip()
+    target_language = target_language.strip()
+    custom_prompt = custom_prompt.strip()
+    output_language = output_language.strip()
+
+    supported_analysis_types = {"summary", "action_items", "translate", "custom"}
+    if analysis_type not in supported_analysis_types:
+        raise HTTPException(
+            400,
+            "Invalid analysis_type. Supported values are: "
+            "summary, action_items, translate, custom.",
+        )
+    if analysis_type == "custom" and not custom_prompt:
+        raise HTTPException(400, "custom_prompt is required when analysis_type is 'custom'.")
+    if analysis_type == "translate" and not target_language:
+        raise HTTPException(
+            400,
+            "target_language is required when analysis_type is 'translate'.",
+        )
     analysis_id = str(uuid.uuid4())
     analysis = Analysis(
         id=analysis_id,
