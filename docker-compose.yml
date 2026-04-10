@@ -1,16 +1,9 @@
-version: "3.9"
-
 services:
   audioscript:
     build: .
-    ports:
-      - "8002:8002"
     volumes:
-      # Edit frontend/index.html and refresh — no rebuild needed
       - ./frontend:/app/frontend:ro
-      # Persist downloaded Whisper/pyannote model weights across restarts
       - whisper_models:/root/.cache/huggingface
-      # Persist settings (HF token), SQLite library DB, and recordings across restarts
       - amicoscript_settings:/root/.amicoscript
     environment:
       - PYTHONUNBUFFERED=1

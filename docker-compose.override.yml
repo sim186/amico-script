@@ -1,0 +1,6 @@
+# Local development overrides — loaded automatically by `docker compose up`.
+# Exposes the app directly on port 8002 without needing Traefik.
+services:
+  audioscript:
+    ports:
+      - "8002:8002"

@@ -60,6 +60,18 @@ docker compose up --build
 
 Then open: http://localhost:8002
 
+#### Production deployment with HTTPS (Traefik)
+
+If you're running behind a [Traefik](https://traefik.io/) reverse proxy, use the production override:
+
+```bash
+cp .env.example .env
+# Edit .env and fill in APP_DOMAIN, TRAEFIK_NETWORK, TRAEFIK_CERTRESOLVER
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+`docker-compose.prod.yml` adds Traefik labels and joins the Traefik Docker network. Traefik handles TLS termination and automatic Let's Encrypt certificates.
+
 ---
 
 ### Local
@@ -90,6 +102,8 @@ Performance depends on your hardware (CPU/GPU) and selected model size.
 - Smaller models → faster processing
 
 Feedback and benchmarks are welcome.
+
+For reproducible benchmarking instructions, see the [BENCHMARKS.md](BENCHMARKS.md) page.
 
 ---
 

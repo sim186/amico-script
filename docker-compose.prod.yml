@@ -1,0 +1,27 @@
+# Production overrides — adds Traefik HTTPS routing.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Required env vars (copy .env.example → .env and fill in):
+#   APP_DOMAIN        — public domain, e.g. amico.example.com
+#   TRAEFIK_NETWORK   — Docker network Traefik is on, e.g. traefik
+#   TRAEFIK_CERTRESOLVER — cert resolver name in your Traefik config, e.g. le
+services:
+  audioscript:
+    expose:
+      - "8002"
+    networks:
+      - default
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.audioscript.rule=Host(`${APP_DOMAIN}`)
+      - traefik.http.routers.audioscript.tls=true
+      - traefik.http.routers.audioscript.tls.certresolver=${TRAEFIK_CERTRESOLVER:-le}
+      - traefik.http.routers.audioscript.entrypoints=websecure
+      - traefik.http.services.audioscript.loadbalancer.server.port=8002
+
+networks:
+  default: {}
+  traefik_net:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

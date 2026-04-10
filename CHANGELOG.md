@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 This project adheres to Semantic Versioning (https://semver.org/) and the
 Keep a Changelog format.
 
+## [Unreleased]
+
+### ✨ Improvements
+
+- **Mobile UI:** Sidebar is now an off-canvas overlay on small screens — tap the hamburger to open it, tap the backdrop to dismiss. Segment action buttons are always visible on touch devices (no hover required).
+- **Mobile UI:** Reduced padding throughout (transcribe tab, transcript segments, AI panel, library toolbar) so content is readable on phone-width viewports.
+- **Mobile UI:** Global search input and "Export" label are hidden on small screens to prevent tab-bar overflow.
+- **Docker:** Compose setup split into three files for clean dev/prod separation:
+  - `docker-compose.yml` — base service definition, no network-specific config.
+  - `docker-compose.override.yml` — local development, auto-loaded by Compose, exposes port 8002.
+  - `docker-compose.prod.yml` — production overlay, adds Traefik labels and joins the Traefik Docker network.
+- **Docker:** Production deployment now supports Traefik reverse proxy with automatic Let's Encrypt HTTPS via TLS-ALPN-01 challenge. Configure via `.env` (see `.env.example`).
+
+---
+
 ## [1.4.0] - 2026-04-06
 
 ### ✨ New Features

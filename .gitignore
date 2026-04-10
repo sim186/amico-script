@@ -32,3 +32,6 @@ dist/
 backend/ffmpeg
 backend/ffmpeg.exe
 backend/ffmpeg.zip
+
+# Local environment (copy .env.example and fill in your values)
+.env
