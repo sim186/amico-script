@@ -568,6 +568,51 @@
       flex: 1;
       min-height: 0;
     }
+
+    /* ====================================================
+       MOBILE RESPONSIVE (< 768px)
+       ==================================================== */
+    @media (max-width: 767px) {
+      /* Sidebar: off-canvas overlay instead of inline flex sibling */
+      #sidebar {
+        position: fixed !important;
+        left: 0; top: 0; bottom: 0;
+        width: min(20rem, 88vw);
+        z-index: 50;
+        display: flex !important; /* always in DOM, never display:none */
+        transform: translateX(-100%);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: none;
+      }
+      #sidebar.mobile-open {
+        transform: translateX(0);
+        box-shadow: 8px 0 32px rgba(15, 23, 42, 0.18);
+      }
+      /* Backdrop behind open sidebar */
+      #sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 49;
+        background: rgba(15, 23, 42, 0.3);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        display: none;
+      }
+      #sidebar-backdrop.active {
+        display: block;
+      }
+      /* Shortcuts modal: full width */
+      #shortcuts-card {
+        max-width: calc(100vw - 2rem);
+        border-radius: 16px;
+        margin: 1rem;
+      }
+      /* Segment action buttons: always visible on touch (no hover) */
+      .seg-actions-overlay {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 
@@ -885,6 +930,9 @@
       </div>
     </aside>
 
+    <!-- Mobile sidebar backdrop -->
+    <div id="sidebar-backdrop" onclick="closeDrawer()"></div>
+
     <!-- ===================================================================
        MAIN PANEL
   =================================================================== -->
@@ -917,7 +965,7 @@
         <!-- Global actions (Export + Search) -->
         <div class="ml-auto flex items-center gap-4 pb-2">
           <div id="export-bar" class="hidden flex items-center gap-1.5">
-            <span class="text-xs text-slate-400 mr-1">Export</span>
+            <span class="text-xs text-slate-400 mr-1 hidden md:inline">Export</span>
             <button data-fmt="json"
               class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">JSON</button>
             <button data-fmt="srt"
@@ -939,7 +987,7 @@
             </svg>
           </button>
           
-          <div class="relative pr-1">
+          <div class="relative pr-1 hidden md:block">
             <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
               xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
@@ -958,7 +1006,7 @@
         <!-- ---------------------------------------------------------------
            TAB: TRANSCRIBE
       --------------------------------------------------------------- -->
-        <div id="tab-transcribe" class="tab-panel active overflow-y-auto px-8 py-8" role="tabpanel">
+        <div id="tab-transcribe" class="tab-panel active overflow-y-auto px-4 py-4 md:px-8 md:py-8" role="tabpanel">
 
           <!-- Upload state -->
           <div id="upload-state">
@@ -1076,7 +1124,28 @@
 
             <!-- Inner panel: Transcript -->
             <div id="inner-panel-transcript" class="inner-tab-panel">
-              <div class="px-6 py-3 bg-white border-b border-slate-100 shrink-0 flex items-center justify-between gap-4">
+              <!-- Live transcription progress (hidden until transcription starts) -->
+              <div id="transcript-processing-header"
+                   class="hidden shrink-0 bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-3"
+                   aria-live="polite">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <span id="tph-message" class="text-xs font-medium text-amber-800 truncate">Transcribing…</span>
+                    <span id="tph-percent" class="text-xs text-amber-600 ml-2 shrink-0">0%</span>
+                  </div>
+                  <div class="w-full bg-amber-200 rounded-full h-1" role="progressbar"
+                       aria-label="Transcription progress" aria-valuemin="0" aria-valuemax="100"
+                       aria-valuenow="0" id="tph-bar-wrap">
+                    <div id="tph-bar" class="bg-amber-500 h-1 rounded-full transition-all duration-300" style="width:0%"></div>
+                  </div>
+                </div>
+                <button id="tph-cancel-btn"
+                        class="shrink-0 text-xs text-amber-700 hover:text-red-600 border border-amber-300 hover:border-red-400 rounded px-2 py-0.5 transition focus:outline-none focus:ring-2 focus:ring-red-400"
+                        aria-label="Cancel transcription">
+                  Cancel
+                </button>
+              </div>
+              <div class="px-3 py-2 md:px-6 md:py-3 bg-white border-b border-slate-100 shrink-0 flex items-center justify-between gap-4">
                 <div class="relative flex-1 max-w-lg">
                   <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
@@ -1099,14 +1168,14 @@
                 </button>
               </div>
               <!-- Segments -->
-              <div class="flex-1 overflow-y-auto px-6 py-4">
+              <div class="flex-1 overflow-y-auto px-3 py-3 md:px-6 md:py-4">
                 <div id="segments-list" role="list" aria-label="Transcript segments" class="space-y-1.5"></div>
               </div>
             </div><!-- /inner-panel-transcript -->
 
             <!-- Inner panel: AI Analysis -->
             <div id="inner-panel-ai" class="inner-tab-panel overflow-y-auto">
-              <div class="w-full px-6 py-6 space-y-4">
+              <div class="w-full px-4 py-4 md:px-6 md:py-6 space-y-4">
 
                 <!-- Output language -->
                 <div>
@@ -1203,7 +1272,7 @@
         <div id="tab-library" class="tab-panel overflow-hidden" role="tabpanel">
           <div class="flex flex-col h-full">
             <!-- Library toolbar -->
-            <div class="px-6 py-3 bg-white border-b border-slate-100 shrink-0 flex items-center gap-3">
+            <div class="px-3 py-2 md:px-6 md:py-3 bg-white border-b border-slate-100 shrink-0 flex items-center gap-3">
               <span id="library-folder-label" class="text-sm font-semibold text-slate-700 flex-1">All recordings</span>
               <div class="flex items-center gap-1.5 text-xs text-slate-500">
                 <label for="lib-sort-select">Sort</label>
@@ -1608,6 +1677,8 @@
     function switchTab(name) {
       clientLog(`Tab switched → ${name}`);
       state.activeTab = name;
+      // Auto-close the drawer when switching tabs on mobile
+      if (isMobile()) closeDrawer();
 
       document.querySelectorAll('.tab-btn').forEach(btn => {
         const active = btn.id === `tab-btn-${name}`;
@@ -2082,12 +2153,25 @@
     function setProcessing(active) {
       document.getElementById('upload-state').classList.toggle('hidden', active);
       document.getElementById('processing-state').classList.toggle('hidden', !active);
+      const tph = document.getElementById('transcript-processing-header');
+      const transcriptBtn = document.getElementById('tab-btn-transcript');
 
       if (active) {
+        transcriptBtn.disabled = false;
+        state.result = null;
+        document.getElementById('segments-list').innerHTML = '';
+        tph.classList.remove('hidden');
+        switchTab('transcript');
+        switchInnerTab('transcript');
         resetJobLogs();
         startLogPolling();
       } else {
+        tph.classList.add('hidden');
         stopLogPolling();
+        if (!state.result) {
+          transcriptBtn.disabled = true;
+          switchTab('transcribe');
+        }
       }
     }
 
@@ -2265,6 +2349,10 @@
         appendJobLogLine(`[${new Date().toLocaleTimeString()}] EVENT ${data.status}: ${state.jobMessage}`);
         updateProcessingUI();
 
+        if (data.status === 'transcribing' && data.data?.segment) {
+          appendLiveSegment(data.data.segment);
+        }
+
         if (data.status === 'done') {
           es.close();
           refreshJobLogs();
@@ -2302,6 +2390,28 @@
       document.getElementById('progress-bar').style.width = `${pct}%`;
       document.getElementById('proc-percent').textContent = `${pct}%`;
       document.getElementById('progress-bar-wrap').setAttribute('aria-valuenow', String(pct));
+      document.getElementById('tph-message').textContent = state.jobMessage || 'Transcribing…';
+      document.getElementById('tph-bar').style.width = `${pct}%`;
+      document.getElementById('tph-percent').textContent = `${pct}%`;
+      document.getElementById('tph-bar-wrap').setAttribute('aria-valuenow', String(pct));
+    }
+
+    function appendLiveSegment(seg) {
+      const list = document.getElementById('segments-list');
+      const div = document.createElement('div');
+      div.className = 'segment group bg-white rounded-r-xl pl-4 pr-5 py-3 opacity-80';
+      div.setAttribute('role', 'listitem');
+      div.dataset.id = String(seg.id);
+      div.dataset.start = String(seg.start);
+      div.dataset.end = String(seg.end);
+      div.innerHTML = `
+        <div class="flex items-baseline gap-1 mb-0.5">
+          <span class="text-xs text-slate-400 font-mono">${fmtDur(seg.start)}</span>
+        </div>
+        <p class="text-sm text-slate-700 leading-relaxed">${escHtml(seg.text)}</p>
+      `;
+      list.appendChild(div);
+      list.parentElement.scrollTop = list.parentElement.scrollHeight;
     }
 
     // =========================================================================
@@ -2955,8 +3065,9 @@
     // localStorage restore
     // =========================================================================
     async function restoreSettings() {
-      // Restore sidebar state (default: visible)
-      if (localStorage.getItem('drawerOpen') === '0') closeDrawer(); else openDrawer();
+      // Restore sidebar state — always closed on mobile, respect localStorage on desktop
+      if (isMobile()) closeDrawer();
+      else if (localStorage.getItem('drawerOpen') === '0') closeDrawer(); else openDrawer();
 
       const m = localStorage.getItem('selectedModel');
       if (m) state.selectedModel = m;
@@ -4343,25 +4454,62 @@
     }
 
     // =========================================================================
-    // Sidebar show/hide (integrated)
+    // Sidebar show/hide (integrated + mobile overlay)
     // =========================================================================
+    function isMobile() { return window.innerWidth < 768; }
+
     function openDrawer() {
       const sb = document.getElementById('sidebar'); if (!sb) return;
-      sb.classList.remove('hidden');
-      // shift console to account for sidebar width (w-72 = 18rem)
-      document.documentElement.style.setProperty('--console-left', '18rem');
+      if (isMobile()) {
+        sb.classList.add('mobile-open');
+        const bd = document.getElementById('sidebar-backdrop');
+        if (bd) bd.classList.add('active');
+      } else {
+        sb.classList.remove('hidden');
+        document.documentElement.style.setProperty('--console-left', '18rem');
+      }
       localStorage.setItem('drawerOpen', '1');
     }
     function closeDrawer() {
       const sb = document.getElementById('sidebar'); if (!sb) return;
-      sb.classList.add('hidden');
-      document.documentElement.style.setProperty('--console-left', '0');
+      if (isMobile()) {
+        sb.classList.remove('mobile-open');
+        const bd = document.getElementById('sidebar-backdrop');
+        if (bd) bd.classList.remove('active');
+      } else {
+        sb.classList.add('hidden');
+        document.documentElement.style.setProperty('--console-left', '0');
+      }
       localStorage.setItem('drawerOpen', '0');
     }
     function toggleDrawer() {
       const sb = document.getElementById('sidebar'); if (!sb) return;
-      if (sb.classList.contains('hidden')) openDrawer(); else closeDrawer();
+      const isOpen = isMobile() ? sb.classList.contains('mobile-open') : !sb.classList.contains('hidden');
+      if (isOpen) closeDrawer(); else openDrawer();
     }
+
+    // On resize: sync sidebar state between mobile and desktop modes
+    window.addEventListener('resize', () => {
+      const sb = document.getElementById('sidebar'); if (!sb) return;
+      const bd = document.getElementById('sidebar-backdrop');
+      if (!isMobile()) {
+        // Switching to desktop: remove mobile classes, restore display
+        sb.classList.remove('mobile-open');
+        if (bd) bd.classList.remove('active');
+        // Restore desktop open/close from localStorage
+        if (localStorage.getItem('drawerOpen') === '0') {
+          sb.classList.add('hidden');
+          document.documentElement.style.setProperty('--console-left', '0');
+        } else {
+          sb.classList.remove('hidden');
+          document.documentElement.style.setProperty('--console-left', '18rem');
+        }
+      } else {
+        // Switching to mobile: remove desktop hidden class (CSS takes over positioning)
+        sb.classList.remove('hidden');
+        document.documentElement.style.setProperty('--console-left', '0');
+      }
+    });
 
     // =========================================================================
     // Init
@@ -4383,6 +4531,7 @@
 
       document.getElementById('start-btn').addEventListener('click', startTranscription);
       document.getElementById('cancel-btn').addEventListener('click', cancelJob);
+      document.getElementById('tph-cancel-btn').addEventListener('click', cancelJob);
 
       document.getElementById('batch-clear-all-btn').addEventListener('click', () => {
         state.batchQueue = state.batchQueue.filter(i => i.status !== 'pending');
