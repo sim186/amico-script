@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 This project adheres to Semantic Versioning (https://semver.org/) and the
 Keep a Changelog format.
 
-## [Unreleased]
+## [1.4.1] - 2026-04-11
 
 ### ✨ Improvements
 
