@@ -17,6 +17,11 @@ Keep a Changelog format.
   - `docker-compose.prod.yml` — production overlay, adds Traefik labels and joins the Traefik Docker network.
 - **Docker:** Production deployment now supports Traefik reverse proxy with automatic Let's Encrypt HTTPS via TLS-ALPN-01 challenge. Configure via `.env` (see `.env.example`).
 
+### 🐛 Fixes
+- **Docker build:** Fixed an issue where the `backend/` directory was copied into the image with an extra nesting level, causing import errors. The `COPY` instruction now correctly places the backend files at the root of the image filesystem.
+- **Versioning:** Updated the `VERSION` file to `1.4.1` to reflect the latest patch release.
+
+
 ---
 
 ## [1.4.0] - 2026-04-06

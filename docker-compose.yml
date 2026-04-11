@@ -2,14 +2,18 @@ services:
   audioscript:
     build: .
     volumes:
-      - ./frontend:/app/frontend:ro
       - whisper_models:/root/.cache/huggingface
       - amicoscript_settings:/root/.amicoscript
     environment:
       - PYTHONUNBUFFERED=1
       - HF_TOKEN=${HF_TOKEN:-}
+      # Mirror the sys.path insertion that run.py performs in venv mode so that
+      # short-name imports (state, pipeline, …) and 'from backend import X'
+      # both resolve correctly inside the container.
+      - PYTHONPATH=/app/backend
     restart: unless-stopped
 
 volumes:
+  
   whisper_models:
   amicoscript_settings:

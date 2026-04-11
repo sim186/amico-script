@@ -13,19 +13,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libavutil-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
+COPY backend/requirements.txt /tmp/requirements.txt
 
 # Install CPU-only PyTorch from the official CPU index
 # to avoid pulling CUDA-linked wheels (libnppicc, libnvrtc etc.)
 # torchcodec is installed from PyPI via requirements.txt but its C extension
 # is mocked at runtime in main.py (no CPU aarch64 wheel exists).
 RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY backend/ .
-COPY frontend/ ./frontend/
+# Preserve backend/ as a subdirectory so it is importable as the 'backend'
+# package (matching the venv layout where run.py adds backend/ to sys.path).
+COPY backend/ backend/
+COPY frontend/ frontend/
 
-RUN mkdir -p uploads
+# Temp staging area for uploaded files before they are moved to STORAGE_ROOT.
+RUN mkdir -p backend/uploads
+
+# Make every module inside backend/ importable by its short name (state, pipeline,
+# etc.) exactly as run.py does by inserting backend/ into sys.path.
+# /app is WORKDIR so 'from backend import X' also resolves via namespace package.
+ENV PYTHONPATH=/app/backend
 
 EXPOSE 8002
 

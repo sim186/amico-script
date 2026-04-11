@@ -1,6 +1,10 @@
 # Local development overrides — loaded automatically by `docker compose up`.
-# Exposes the app directly on port 8002 without needing Traefik.
+# Exposes the app directly on port 8002 without needing Traefik, and
+# bind-mounts the frontend directory for hot-reloading during development.
+# In production (docker-compose.prod.yml) the frontend baked into the image is used.
 services:
   audioscript:
     ports:
       - "8002:8002"
+    volumes:
+      - ./frontend:/app/frontend:ro
