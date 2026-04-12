@@ -795,6 +795,30 @@
             <div id="meta-items" class="space-y-1.5"></div>
             <!-- Folder & tags for the open recording -->
             <div id="rec-folder-tag-meta" class="hidden pt-1"></div>
+            <!-- Auto-tag -->
+            <div id="auto-tag-container" class="hidden pt-1">
+              <button id="auto-tag-btn"
+                class="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500 hover:border-brand hover:text-brand transition w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347a3.168 3.168 0 01-.956 2.27A3 3 0 0112 21a3 3 0 01-2.137-.883 3.168 3.168 0 01-.956-2.27l-.347-.347z"/>
+                </svg>
+                <span id="auto-tag-btn-label">Auto-tag</span>
+              </button>
+              <div id="auto-tag-panel" class="hidden mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <p class="text-xs text-slate-500">Suggested tags:</p>
+                <div id="auto-tag-chips" class="flex flex-wrap gap-1.5"></div>
+                <div class="flex gap-2">
+                  <button id="auto-tag-apply-btn"
+                    class="text-xs px-2.5 py-1 rounded-lg bg-brand text-white hover:bg-brand/90 transition">
+                    Apply all
+                  </button>
+                  <button id="auto-tag-cancel-btn"
+                    class="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500 hover:border-slate-400 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Speaker legend -->
@@ -900,6 +924,14 @@
                   </button>
                 </div>
               </div>
+              <!-- Embedding Model -->
+              <div>
+                <label for="embedding-model-input" class="block text-xs text-slate-500 mb-0.5">
+                  Embedding Model <span class="font-normal text-slate-400">(for semantic search)</span>
+                </label>
+                <input id="embedding-model-input" type="text" placeholder="nomic-embed-text"
+                  class="w-full text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand" />
+              </div>
               <!-- Test + status -->
               <div class="flex items-center gap-2">
                 <button id="llm-test-btn" type="button"
@@ -907,6 +939,14 @@
                   Test Connection
                 </button>
                 <span id="llm-test-status" class="text-xs"></span>
+              </div>
+              <!-- Index all transcripts for semantic search -->
+              <div class="flex items-center gap-2 pt-1 border-t border-slate-100">
+                <button id="index-all-semantic-btn" type="button"
+                  class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-brand hover:text-brand transition">
+                  Index all transcripts
+                </button>
+                <span id="index-all-status" class="text-xs text-slate-400"></span>
               </div>
             </div>
           </details>
@@ -1048,7 +1088,13 @@
                 d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
             </svg>
             <input id="global-search-input" type="search" placeholder="Search library…"
-              class="w-44 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition" />
+              class="w-44 pl-8 pr-12 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition" />
+            <button id="search-mode-toggle"
+              title="Toggle search mode: Keyword / AI Semantic"
+              onclick="toggleSearchMode()"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-500 hover:bg-brand/10 hover:text-brand transition select-none">
+              KW
+            </button>
             <div id="global-search-dropdown" class="search-dropdown hidden"></div>
           </div>
         </div>
@@ -1571,6 +1617,12 @@
       // AI Analysis
       analysisJobId: null,
       analysisEventSource: null,
+
+      // Auto-tag suggestions (populated by suggest-tags endpoint)
+      _autoTagSuggestions: [],
+
+      // Search mode: 'keyword' or 'semantic'
+      searchMode: 'keyword',
 
       // Library data
       library: {
@@ -2797,9 +2849,15 @@
             ? `<div class="space-y-1">${folderHtml}${tagsHtml}</div>`
             : '';
           recMetaEl.classList.toggle('hidden', !folderHtml && !tagsHtml);
+
+          // Show auto-tag button when a recording with a transcript is open
+          const autoTagContainer = document.getElementById('auto-tag-container');
+          if (autoTagContainer) autoTagContainer.classList.remove('hidden');
         } else {
           recMetaEl.innerHTML = '';
           recMetaEl.classList.add('hidden');
+          const autoTagContainer = document.getElementById('auto-tag-container');
+          if (autoTagContainer) autoTagContainer.classList.add('hidden');
         }
       }
 
@@ -3436,6 +3494,7 @@
           if (cfg.llm_base_url) document.getElementById('llm-base-url').value = cfg.llm_base_url;
           if (cfg.llm_model_name) document.getElementById('llm-model-input').value = cfg.llm_model_name;
           if (cfg.llm_api_key) document.getElementById('llm-api-key').value = cfg.llm_api_key;
+          document.getElementById('embedding-model-input').value = cfg.embedding_model_name || 'nomic-embed-text';
         }
       } catch (_) { /* server not available */ }
     }
@@ -4088,6 +4147,14 @@
           </div>
 
           <span class="px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}">${rec.status}</span>
+          ${rec.status === 'done' ? `
+          <button class="p-1.5 rounded-lg transition focus:outline-none ${rec.semantic_indexed ? 'text-brand hover:text-brand/70' : 'text-slate-300 hover:text-brand hover:bg-brand/5'}"
+                  title="${rec.semantic_indexed ? 'Re-index for semantic search' : 'Index for semantic search'}"
+                  onclick="indexRecordingSemantic('${rec.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="${rec.semantic_indexed ? 'currentColor' : 'none'}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347a3.168 3.168 0 01-.956 2.27A3 3 0 0112 21a3 3 0 01-2.137-.883 3.168 3.168 0 01-.956-2.27l-.347-.347z"/>
+            </svg>
+          </button>` : ''}
           <button class="p-1.5 rounded-lg text-slate-300 hover:text-red-400 transition focus:outline-none"
                   title="Delete recording"
                   onclick="deleteRecordingConfirm('${rec.id}')">
@@ -4297,7 +4364,7 @@
       }
     }
 
-    async function openRecording(rec) {
+    async function openRecording(rec, seekToTime = null) {
       if (rec.status !== 'done') {
         alert(`This recording has status "${rec.status}" and cannot be opened yet.`);
         return;
@@ -4343,11 +4410,35 @@
 
         renderResults();
 
+        // Seek to a specific segment timestamp (e.g. from semantic search results)
+        if (seekToTime != null && state.wavesurfer) {
+          try {
+            const dur = state.wavesurfer.getDuration();
+            if (dur > 0) state.wavesurfer.seekTo(Math.min(seekToTime / dur, 1));
+          } catch (_) { }
+        }
+
         const transcriptBtn = document.getElementById('tab-btn-transcript');
         transcriptBtn.disabled = false;
         switchTab('transcript');
       } catch (err) {
         alert(`Failed to open recording: ${err.message}`);
+      }
+    }
+
+    async function indexRecordingSemantic(recId) {
+      try {
+        const res = await fetch(`/api/recordings/${recId}/index-semantic`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'Failed to queue indexing');
+        }
+        showToast('Semantic indexing queued');
+        // Refresh library once the job completes (polling via existing job stream not wired here,
+        // so just re-fetch library on a short delay to pick up the new semantic_indexed flag)
+        setTimeout(() => fetchLibrary(), 3000);
+      } catch (err) {
+        showToast('Indexing failed: ' + err.message, 'error');
       }
     }
 
@@ -4421,7 +4512,25 @@
       });
     }
 
+    function toggleSearchMode() {
+      state.searchMode = state.searchMode === 'keyword' ? 'semantic' : 'keyword';
+      const btn = document.getElementById('search-mode-toggle');
+      const input = document.getElementById('global-search-input');
+      if (state.searchMode === 'semantic') {
+        btn.textContent = 'AI';
+        btn.classList.add('bg-brand/10', 'text-brand');
+        btn.classList.remove('bg-slate-100', 'text-slate-500');
+        input.placeholder = 'Ask a question…';
+      } else {
+        btn.textContent = 'KW';
+        btn.classList.remove('bg-brand/10', 'text-brand');
+        btn.classList.add('bg-slate-100', 'text-slate-500');
+        input.placeholder = 'Search library…';
+      }
+    }
+
     async function runGlobalSearch(q) {
+      if (state.searchMode === 'semantic') { await runSemanticSearch(q); return; }
       const dropdown = document.getElementById('global-search-dropdown');
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15`);
@@ -4453,8 +4562,52 @@
       } catch (_) { }
     }
 
+    async function runSemanticSearch(q) {
+      const dropdown = document.getElementById('global-search-dropdown');
+      dropdown.innerHTML = '<div class="search-dropdown-item text-xs text-slate-400">Searching…</div>';
+      dropdown.classList.remove('hidden');
+      try {
+        const res = await fetch(`/api/search/semantic?q=${encodeURIComponent(q)}&limit=15`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          dropdown.innerHTML = `<div class="search-dropdown-item text-xs text-red-400">${escHtml(err.detail || 'Semantic search failed')}</div>`;
+          return;
+        }
+        const results = await res.json();
+        if (!results.length) {
+          dropdown.innerHTML = '<div class="search-dropdown-item text-xs text-slate-400">No semantic matches found. Try indexing your recordings first.</div>';
+          return;
+        }
+        dropdown.innerHTML = '';
+        results.forEach(r => {
+          const item = document.createElement('div');
+          item.className = 'search-dropdown-item';
+          const ts = (r.start != null) ? fmtDur(r.start) : '';
+          const score = Math.round(r.score * 100);
+          item.innerHTML = `
+            <p class="text-xs font-semibold text-slate-700 truncate">${escHtml(r.filename)}</p>
+            <p class="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+              ${ts ? `<span class="font-mono">${ts}</span>` : ''}
+              <span class="truncate">${escHtml((r.chunk_text || '').slice(0, 90))}</span>
+              <span class="shrink-0 px-1 py-0.5 rounded bg-brand/10 text-brand text-[10px] font-medium">${score}%</span>
+            </p>`;
+          item.onclick = () => {
+            dropdown.classList.add('hidden');
+            document.getElementById('global-search-input').value = '';
+            const rec = { id: r.recording_id, filename: r.filename, status: 'done', duration: r.duration, tags: [], semantic_indexed: true };
+            openRecording(rec, r.start);
+          };
+          dropdown.appendChild(item);
+        });
+        dropdown.classList.remove('hidden');
+      } catch (err) {
+        dropdown.innerHTML = `<div class="search-dropdown-item text-xs text-red-400">${escHtml(err.message)}</div>`;
+      }
+    }
+
     // Perform a search and populate the library view with matching recordings
     async function doSearchToLibrary(q) {
+      if (state.searchMode === 'semantic') { await doSemanticSearchToLibrary(q); return; }
       if (!q) {
         state.library.selectedFolderId = null;
         state.library.selectedTagId = null;
@@ -4497,6 +4650,44 @@
         try { fetchFolders(); fetchTags(); } catch (_) { }
       } catch (err) {
         console.error('Search to library failed', err);
+      }
+    }
+
+    async function doSemanticSearchToLibrary(q) {
+      if (!q) { fetchLibrary(); return; }
+      try {
+        const res = await fetch(`/api/search/semantic?q=${encodeURIComponent(q)}&limit=50`);
+        if (!res.ok) { showToast((await res.json().catch(() => ({}))).detail || 'Semantic search failed', 'error'); return; }
+        const rows = await res.json();
+
+        if (!rows.length) {
+          state.library.recordings = [];
+          renderLibrary();
+          if (state.activeTab !== 'library') switchTab('library');
+          return;
+        }
+
+        // De-duplicate by recording_id, keeping best score per recording
+        const best = {};
+        rows.forEach(r => { if (!best[r.recording_id] || r.score > best[r.recording_id].score) best[r.recording_id] = r; });
+        const unique = Object.values(best).sort((a, b) => b.score - a.score);
+
+        const recPromises = unique.map(r => fetch(`/api/recordings/${r.recording_id}`).then(rp => rp.ok ? rp.json() : null).catch(() => null));
+        const recs = (await Promise.all(recPromises)).filter(Boolean);
+        state.library.recordings = recs;
+        state.library.selectedFolderId = null;
+        state.library.selectedTagId = null;
+
+        const label = document.getElementById('library-folder-label');
+        if (label) {
+          label.textContent = `AI results for "${q}"`;
+          label.style.backgroundColor = hexToRgba('#6c63ff', 0.09);
+        }
+
+        renderLibrary();
+        if (state.activeTab !== 'library') switchTab('library');
+      } catch (err) {
+        console.error('Semantic search to library failed', err);
       }
     }
 
@@ -4698,7 +4889,7 @@
 
       // LLM Settings: auto-save on input (debounced)
       let _llmSaveTimer = null;
-      ['llm-base-url', 'llm-model-input', 'llm-api-key'].forEach(id => {
+      ['llm-base-url', 'llm-model-input', 'llm-api-key', 'embedding-model-input'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
           clearTimeout(_llmSaveTimer);
           _llmSaveTimer = setTimeout(saveLlmSettings, 600);
@@ -4729,6 +4920,26 @@
 
       // Test connection button
       document.getElementById('llm-test-btn').addEventListener('click', testLlmConnection);
+
+      // Index all transcripts button
+      document.getElementById('index-all-semantic-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('index-all-semantic-btn');
+        const status = document.getElementById('index-all-status');
+        btn.disabled = true;
+        status.textContent = 'Queueing…';
+        try {
+          const res = await fetch('/api/index-semantic-all', { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || 'Failed');
+          status.textContent = data.queued > 0 ? `${data.queued} job(s) queued` : 'All already indexed';
+          if (data.queued > 0) showToast(`Queued ${data.queued} indexing job(s)`);
+        } catch (err) {
+          status.textContent = 'Failed: ' + err.message;
+          showToast('Index all failed: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
     }
 
     function getSelectedAnalysisType() {
@@ -4840,6 +5051,97 @@
       _resetAnalysisBtn();
     }
 
+    // =========================================================================
+    // === AUTO-TAG ===
+    // =========================================================================
+
+    async function autoTagRecording() {
+      const recId = state.activeRecordingId || state.recordingId;
+      if (!recId) return;
+      const btn = document.getElementById('auto-tag-btn');
+      const label = document.getElementById('auto-tag-btn-label');
+      const panel = document.getElementById('auto-tag-panel');
+      const chips = document.getElementById('auto-tag-chips');
+
+      btn.disabled = true;
+      label.textContent = 'Thinking…';
+
+      try {
+        const res = await fetch(`/api/recordings/${recId}/suggest-tags`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'Suggestion failed');
+        }
+        const data = await res.json();
+        state._autoTagSuggestions = data.suggestions || [];
+
+        if (!state._autoTagSuggestions.length) {
+          showToast('No tag suggestions returned');
+          return;
+        }
+
+        chips.innerHTML = state._autoTagSuggestions.map(s =>
+          `<span class="tag-pill" style="background:${escHtml(s.color_code)}">${escHtml(s.name)}</span>`
+        ).join('');
+
+        panel.classList.remove('hidden');
+      } catch (err) {
+        showToast('Auto-tag failed: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        label.textContent = 'Auto-tag';
+      }
+    }
+
+    async function applyAutoTags() {
+      const recId = state.activeRecordingId || state.recordingId;
+      const suggestions = state._autoTagSuggestions || [];
+      if (!recId || !suggestions.length) return;
+
+      const applyBtn = document.getElementById('auto-tag-apply-btn');
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Applying…';
+
+      try {
+        for (const s of suggestions) {
+          let tagId = s.existing_tag_id;
+
+          if (!tagId) {
+            const fd = new FormData();
+            fd.append('name', s.name);
+            fd.append('color_code', s.color_code);
+            const cr = await fetch('/api/tags', { method: 'POST', body: fd });
+            if (!cr.ok) continue;
+            const tag = await cr.json();
+            tagId = tag.id;
+          }
+
+          await fetch(`/api/recordings/${recId}/tags/${tagId}`, { method: 'POST' });
+        }
+
+        // Refresh recording metadata and tags display
+        try {
+          const recRes = await fetch(`/api/recordings/${recId}`);
+          if (recRes.ok) {
+            state.currentRecording = await recRes.json();
+            const libRec = state.library.recordings.find(r => r.id === recId);
+            if (libRec) Object.assign(libRec, state.currentRecording);
+          }
+        } catch (_) { }
+
+        renderResults(state.result);
+        fetchTags();
+        document.getElementById('auto-tag-panel').classList.add('hidden');
+        state._autoTagSuggestions = [];
+        showToast(`Applied ${suggestions.length} tag(s)`);
+      } catch (err) {
+        showToast('Failed to apply tags: ' + err.message, 'error');
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'Apply all';
+      }
+    }
+
     async function loadPastAnalyses(recordingId) {
       if (!recordingId) return;
       try {
@@ -4925,10 +5227,12 @@
       const fd = new FormData();
       const baseUrl = document.getElementById('llm-base-url').value.trim() || 'http://localhost:11434';
       const model = document.getElementById('llm-model-input').value.trim();
+      const embModel = document.getElementById('embedding-model-input').value.trim() || 'nomic-embed-text';
       fd.append('llm_base_url', baseUrl);
       fd.append('llm_model_name', model);
       fd.append('llm_api_key', document.getElementById('llm-api-key').value);
-      clientLog(`LLM settings saved: url=${baseUrl}, model=${model || '(none)'}`);
+      fd.append('embedding_model_name', embModel);
+      clientLog(`LLM settings saved: url=${baseUrl}, model=${model || '(none)'}, embed=${embModel}`);
       try { await fetch('/api/llm/settings', { method: 'POST', body: fd }); } catch { /* ignore */ }
     }
 
@@ -5162,6 +5466,14 @@
         document.documentElement.style.setProperty('--console-h', `${h}px`);
       });
       initAiAnalysis();
+
+      // Auto-tag button listeners
+      document.getElementById('auto-tag-btn').addEventListener('click', autoTagRecording);
+      document.getElementById('auto-tag-apply-btn').addEventListener('click', applyAutoTags);
+      document.getElementById('auto-tag-cancel-btn').addEventListener('click', () => {
+        document.getElementById('auto-tag-panel').classList.add('hidden');
+        state._autoTagSuggestions = [];
+      });
 
       // Inner tabs: Transcript / AI Analysis
       document.getElementById('inner-tab-btn-transcript').addEventListener('click', () => switchInnerTab('transcript'));

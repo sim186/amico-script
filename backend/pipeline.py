@@ -439,6 +439,10 @@ def _process_job(job_id: str) -> None:  # noqa: C901 — complex by necessity
             _process_analysis_job(job_id)
             return
 
+        if job_type == "semantic_index":
+            _process_semantic_index_job(job_id)
+            return
+
         colab_url = opts.get("colab_url")
         if colab_url:
             _process_colab_job(job_id, colab_url)
@@ -937,6 +941,95 @@ def _build_analysis_prompt(
         raise ValueError(f"Unknown analysis_type: {analysis_type!r}")
 
 
+def _build_suggest_tags_prompt(
+    full_text: str,
+    existing_tag_names: list,
+    applied_tag_names: list,
+) -> str:
+    """Build the prompt for automatic tag suggestion."""
+    existing = ", ".join(existing_tag_names) if existing_tag_names else "none"
+    applied = ", ".join(applied_tag_names) if applied_tag_names else "none"
+    snippet = full_text[:4000]
+    return (
+        "You are a tagging assistant. Suggest 3 to 5 concise tags for the transcript below.\n\n"
+        f"Existing tags in the library (reuse these exact names when relevant):\n{existing}\n\n"
+        f"Already applied to this recording (do NOT suggest these again):\n{applied}\n\n"
+        "Rules:\n"
+        "- Prefer reusing existing tag names exactly as shown\n"
+        "- New tag names must be lowercase and hyphenated (e.g. 'action-items', 'q4-planning')\n"
+        "- Output ONLY a JSON array of strings, no markdown fences, no explanation\n"
+        "- Example output: [\"meeting\", \"q4-planning\", \"action-items\"]\n\n"
+        f"<transcript>\n{snippet}\n</transcript>"
+    )
+
+
+def _suggest_tags_llm(prompt: str, cfg: dict) -> list:
+    """Call the LLM (non-streaming) and return a list of suggested tag name strings."""
+    import json as _json
+    import re as _re
+    import requests as _req
+
+    base_url = cfg["llm_base_url"].rstrip("/")
+    model_name = cfg["llm_model_name"]
+    api_key = cfg.get("llm_api_key", "")
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "max_tokens": 200,
+    }
+    resp = _req.post(
+        f"{base_url}/v1/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    content = resp.json()["choices"][0]["message"]["content"].strip()
+
+    # Robustly extract the first [...] JSON array from the response
+    match = _re.search(r'\[.*?\]', content, _re.DOTALL)
+    if not match:
+        raise ValueError(f"LLM did not return a JSON array. Got: {content[:200]!r}")
+    candidates = _json.loads(match.group())
+    return [str(s).strip().lower() for s in candidates if isinstance(s, str) and s.strip()][:5]
+
+
+def _get_embedding(text: str, cfg: dict) -> list:
+    """Call Ollama's /api/embed endpoint and return the embedding vector."""
+    import requests as _req
+
+    base_url = cfg["llm_base_url"].rstrip("/")
+    model_name = cfg.get("embedding_model_name", "nomic-embed-text")
+    api_key = cfg.get("llm_api_key", "")
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    resp = _req.post(
+        f"{base_url}/api/embed",
+        json={"model": model_name, "input": text},
+        headers=headers,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["embeddings"][0]
+
+
+def _cosine_similarity(a: list, b: list) -> float:
+    """Pure-Python cosine similarity between two equal-length float vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
 def _process_analysis_job(job_id: str) -> None:
     """Background task: call a local LLM and stream the result via SSE."""
     import json as _json
@@ -1058,6 +1151,89 @@ def _process_analysis_job(job_id: str) -> None:
                     session.commit()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Semantic index job
+# ---------------------------------------------------------------------------
+
+def _process_semantic_index_job(job_id: str) -> None:
+    """Background task: embed each transcript segment and store in TranscriptEmbedding."""
+    import json as _json
+    from db import new_session
+    from models import Transcript, TranscriptEmbedding
+    from sqlmodel import delete as _delete, select as _select
+
+    job = state.jobs[job_id]
+    recording_id = job["recording_id"]
+    cfg = job["options"]["llm_cfg"]
+
+    try:
+        _push_event(job_id, "indexing", 0.02, "Loading transcript…")
+
+        with new_session() as session:
+            tr = session.exec(
+                _select(Transcript).where(Transcript.recording_id == recording_id)
+            ).first()
+            if not tr:
+                raise ValueError("Transcript not found")
+            data = _json.loads(tr.json_data)
+            segments = data.get("segments", [])
+
+        if not segments:
+            _push_event(job_id, "done", 1.0, "No segments to index.")
+            job["status"] = "done"
+            return
+
+        # Delete any stale embeddings for this recording before re-indexing
+        with new_session() as session:
+            session.exec(
+                _delete(TranscriptEmbedding).where(
+                    TranscriptEmbedding.recording_id == recording_id
+                )
+            )
+            session.commit()
+
+        total = len(segments)
+        model_name = cfg.get("embedding_model_name", "nomic-embed-text")
+        embeddings_batch = []
+
+        for idx, seg in enumerate(segments):
+            if job["cancel_flag"].is_set():
+                _push_event(job_id, "cancelled", 0.0, "Indexing cancelled.")
+                job["status"] = "cancelled"
+                return
+
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+
+            vec = _get_embedding(text, cfg)
+            embeddings_batch.append(TranscriptEmbedding(
+                recording_id=recording_id,
+                segment_index=idx,
+                chunk_text=text,
+                embedding=_json.dumps(vec),
+                model_name=model_name,
+            ))
+
+            progress = 0.05 + 0.90 * ((idx + 1) / total)
+            _push_event(job_id, "indexing", progress, f"Indexed {idx + 1}/{total} segments…")
+
+        with new_session() as session:
+            for emb in embeddings_batch:
+                session.add(emb)
+            session.commit()
+
+        _push_event(job_id, "done", 1.0, f"Indexed {len(embeddings_batch)} segments.")
+        _append_job_log(job_id, "INFO", "Semantic index job finished successfully.")
+        job["status"] = "done"
+
+    except Exception as exc:
+        _append_job_log(job_id, "ERROR", f"Semantic index job failed: {exc}")
+        _push_event(job_id, "error", -1, str(exc))
+        job["status"] = "error"
+        job["error"] = str(exc)
 
 
 # ---------------------------------------------------------------------------

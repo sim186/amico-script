@@ -33,6 +33,7 @@ def init_db() -> None:
     """Create all tables and set up the FTS5 virtual table + sync triggers."""
     # Import models so SQLModel.metadata is populated before create_all.
     import models  # noqa: F401
+    from models import TranscriptEmbedding  # noqa: F401 — registers new table
 
     SQLModel.metadata.create_all(engine)
 

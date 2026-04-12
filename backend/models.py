@@ -92,3 +92,17 @@ class Analysis(SQLModel, table=True):
     created_at: float = Field(default_factory=time.time)
     # pending | done | error
     status: str = Field(default="pending")
+
+
+# ---------------------------------------------------------------------------
+# TranscriptEmbedding  (segment-level vectors for semantic search)
+# ---------------------------------------------------------------------------
+
+class TranscriptEmbedding(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    recording_id: str = Field(foreign_key="recording.id", index=True)
+    segment_index: int                    # position in segments array
+    chunk_text: str                       # segment text at indexing time
+    embedding: str                        # JSON float array (TEXT, same pattern as json_data)
+    model_name: str                       # embedding model used
+    created_at: float = Field(default_factory=time.time)

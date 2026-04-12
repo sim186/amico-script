@@ -34,12 +34,13 @@ def _get_saved_hf_token() -> str:
 
 
 def _get_llm_settings() -> dict:
-    """Return LLM config: base_url, model_name, api_key."""
+    """Return LLM config: base_url, model_name, api_key, embedding_model_name."""
     settings = _load_settings()
     return {
         "llm_base_url": settings.get("llm_base_url", "http://localhost:11434"),
         "llm_model_name": settings.get("llm_model_name", ""),
         "llm_api_key": settings.get("llm_api_key", ""),
+        "embedding_model_name": settings.get("embedding_model_name", "nomic-embed-text"),
     }
 
 
@@ -49,4 +50,11 @@ def _save_llm_settings(base_url: str, model_name: str, api_key: str) -> None:
     settings["llm_base_url"] = base_url
     settings["llm_model_name"] = model_name
     settings["llm_api_key"] = api_key
+    _save_settings(settings)
+
+
+def _save_embedding_model(model_name: str) -> None:
+    """Persist embedding model name to disk."""
+    settings = _load_settings()
+    settings["embedding_model_name"] = model_name
     _save_settings(settings)

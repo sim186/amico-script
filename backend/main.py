@@ -62,10 +62,11 @@ from sse_starlette.sse import EventSourceResponse
 import state
 from db import get_session, init_db, new_session
 from exports import _format_json, _format_srt, _format_txt, _format_md
-from models import Analysis, Folder, Recording, RecordingTag, Tag, Transcript
+from models import Analysis, Folder, Recording, RecordingTag, Tag, Transcript, TranscriptEmbedding
 from pipeline import _append_job_log, _cleanup_job_temp_files, _push_event, _worker_loop
+from pipeline import _build_suggest_tags_prompt, _suggest_tags_llm, _get_embedding, _cosine_similarity
 from releases import _fetch_latest_release, _is_version_newer
-from settings import _get_llm_settings, _get_saved_hf_token, _load_settings, _save_llm_settings, _save_settings
+from settings import _get_llm_settings, _get_saved_hf_token, _load_settings, _save_llm_settings, _save_settings, _save_embedding_model
 from storage import get_recording_audio_path, ingest_file
 
 # ---------------------------------------------------------------------------
@@ -281,8 +282,10 @@ async def save_llm_settings(
     llm_base_url: str = Form("http://localhost:11434"),
     llm_model_name: str = Form(""),
     llm_api_key: str = Form(""),
+    embedding_model_name: str = Form("nomic-embed-text"),
 ) -> dict:
     _save_llm_settings(llm_base_url, llm_model_name, llm_api_key)
+    _save_embedding_model(embedding_model_name)
     return {"ok": True}
 
 
@@ -758,7 +761,7 @@ AUDIO_MEDIA_TYPES = {
 
 
 def _recording_with_tags(recording: Recording, session: Session) -> dict:
-    """Build a serialisable dict for a Recording including its tags."""
+    """Build a serialisable dict for a Recording including its tags and semantic index status."""
     links = session.exec(
         select(RecordingTag).where(RecordingTag.recording_id == recording.id)
     ).all()
@@ -769,6 +772,11 @@ def _recording_with_tags(recording: Recording, session: Session) -> dict:
             {"id": t.id, "name": t.name, "color_code": t.color_code}
             for t in session.exec(select(Tag).where(Tag.id.in_(tag_ids))).all()
         ]
+    has_embedding = session.exec(
+        select(TranscriptEmbedding).where(
+            TranscriptEmbedding.recording_id == recording.id
+        ).limit(1)
+    ).first() is not None
     return {
         "id": recording.id,
         "filename": recording.filename,
@@ -779,6 +787,7 @@ def _recording_with_tags(recording: Recording, session: Session) -> dict:
         "created_at": recording.created_at,
         "transcription_options": json.loads(recording.transcription_options or "{}"),
         "tags": tags,
+        "semantic_indexed": has_embedding,
     }
 
 
@@ -865,7 +874,7 @@ def delete_recording(recording_id: str, session: Session = Depends(get_session))
     except OSError:
         pass
 
-    # Cascade: delete RecordingTag links, Transcript rows, and Analysis rows.
+    # Cascade: delete RecordingTag links, Transcript rows, Analysis rows, and embeddings.
     for link in session.exec(
         select(RecordingTag).where(RecordingTag.recording_id == recording_id)
     ).all():
@@ -878,6 +887,10 @@ def delete_recording(recording_id: str, session: Session = Depends(get_session))
         select(Analysis).where(Analysis.recording_id == recording_id)
     ).all():
         session.delete(an)
+    for emb in session.exec(
+        select(TranscriptEmbedding).where(TranscriptEmbedding.recording_id == recording_id)
+    ).all():
+        session.delete(emb)
 
     session.delete(rec)
     session.commit()
@@ -987,6 +1000,17 @@ async def edit_segment(
 
     session.add(tr)
     session.commit()
+
+    # Invalidate the stale embedding for the edited segment
+    from sqlmodel import delete as _delete
+    session.exec(
+        _delete(TranscriptEmbedding).where(
+            (TranscriptEmbedding.recording_id == recording_id)
+            & (TranscriptEmbedding.segment_index == segment_index)
+        )
+    )
+    session.commit()
+
     return {"ok": True, "segment_index": segment_index}
 
 
@@ -1407,6 +1431,223 @@ def remove_recording_tag(
         session.delete(link)
         session.commit()
     return {"ok": True}
+
+
+@app.post("/api/recordings/{recording_id}/suggest-tags")
+async def suggest_tags(
+    recording_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Use the configured LLM to suggest tags for a recording (does not write to DB)."""
+    import random
+
+    rec = session.get(Recording, recording_id)
+    if not rec:
+        raise HTTPException(404, "Recording not found")
+
+    tr = session.exec(
+        select(Transcript).where(Transcript.recording_id == recording_id)
+    ).first()
+    if not tr:
+        raise HTTPException(400, "Transcript not found — complete transcription first")
+
+    cfg = _get_llm_settings()
+    if not cfg.get("llm_model_name"):
+        raise HTTPException(400, "No LLM model configured. Set it in AI Analysis settings.")
+
+    all_tags = session.exec(select(Tag)).all()
+    existing_tag_names = [t.name for t in all_tags]
+    existing_by_name = {t.name.lower(): t for t in all_tags}
+
+    applied_links = session.exec(
+        select(RecordingTag).where(RecordingTag.recording_id == recording_id)
+    ).all()
+    applied_tag_ids = {lnk.tag_id for lnk in applied_links}
+    applied_tag_names = [t.name for t in all_tags if t.id in applied_tag_ids]
+
+    prompt = _build_suggest_tags_prompt(tr.full_text, existing_tag_names, applied_tag_names)
+
+    try:
+        suggested_names = await run_in_threadpool(_suggest_tags_llm, prompt, cfg)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"LLM request failed: {exc}") from exc
+
+    colors = list(ALLOWED_COLORS)
+    suggestions = []
+    for name in suggested_names:
+        existing_tag = existing_by_name.get(name.lower())
+        suggestions.append({
+            "name": name,
+            "existing_tag_id": existing_tag.id if existing_tag else None,
+            "color_code": existing_tag.color_code if existing_tag else random.choice(colors),
+        })
+
+    return {"suggestions": suggestions}
+
+
+# ---------------------------------------------------------------------------
+# API: semantic search + indexing
+# ---------------------------------------------------------------------------
+
+@app.post("/api/recordings/{recording_id}/index-semantic")
+async def index_semantic(
+    recording_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Queue a background job to embed all transcript segments for semantic search."""
+    rec = session.get(Recording, recording_id)
+    if not rec:
+        raise HTTPException(404, "Recording not found")
+
+    tr = session.exec(
+        select(Transcript).where(Transcript.recording_id == recording_id)
+    ).first()
+    if not tr:
+        raise HTTPException(400, "Transcript not found — complete transcription first")
+
+    cfg = _get_llm_settings()
+    if not cfg.get("embedding_model_name"):
+        raise HTTPException(400, "No embedding model configured. Set it in AI Analysis settings.")
+
+    job_id = str(uuid.uuid4())
+    job: dict = {
+        "id": job_id,
+        "type": "semantic_index",
+        "recording_id": recording_id,
+        "status": "queued",
+        "progress": 0.0,
+        "message": "Queued for semantic indexing",
+        "file_path": rec.file_path,
+        "original_filename": rec.filename,
+        "options": {"llm_cfg": cfg},
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+        "sse_queue": asyncio.Queue(),
+        "cancel_flag": threading.Event(),
+        "logs": [],
+        "temp_files": [],
+    }
+    state.jobs[job_id] = job
+    state.JOB_QUEUE.put(job_id)
+    return {"job_id": job_id}
+
+
+@app.post("/api/index-semantic-all")
+async def index_all_semantic(session: Session = Depends(get_session)) -> dict:
+    """Queue semantic indexing jobs for all transcribed recordings not yet indexed."""
+    cfg = _get_llm_settings()
+    if not cfg.get("embedding_model_name"):
+        raise HTTPException(400, "No embedding model configured. Set it in AI Analysis settings.")
+
+    indexed_recording_ids = {
+        row.recording_id
+        for row in session.exec(
+            select(TranscriptEmbedding.recording_id).distinct()
+        ).all()
+    }
+    transcribed = session.exec(
+        select(Recording).where(Recording.status == "done")
+    ).all()
+    to_index = [r for r in transcribed if r.id not in indexed_recording_ids]
+
+    job_ids = []
+    for rec in to_index:
+        job_id = str(uuid.uuid4())
+        job: dict = {
+            "id": job_id,
+            "type": "semantic_index",
+            "recording_id": rec.id,
+            "status": "queued",
+            "progress": 0.0,
+            "message": "Queued for semantic indexing",
+            "file_path": rec.file_path,
+            "original_filename": rec.filename,
+            "options": {"llm_cfg": cfg},
+            "result": None,
+            "error": None,
+            "created_at": time.time(),
+            "sse_queue": asyncio.Queue(),
+            "cancel_flag": threading.Event(),
+            "logs": [],
+            "temp_files": [],
+        }
+        state.jobs[job_id] = job
+        state.JOB_QUEUE.put(job_id)
+        job_ids.append(job_id)
+
+    return {"queued": len(job_ids), "job_ids": job_ids}
+
+
+@app.get("/api/search/semantic")
+async def semantic_search(
+    q: str = "",
+    limit: int = 10,
+    session: Session = Depends(get_session),
+) -> list:
+    """Embed the query and return transcript segments ranked by cosine similarity."""
+    if not q.strip():
+        return []
+
+    cfg = _get_llm_settings()
+    if not cfg.get("embedding_model_name"):
+        raise HTTPException(400, "No embedding model configured. Set it in AI Analysis settings.")
+
+    safe_limit = min(limit, 50)
+
+    try:
+        query_vec = await run_in_threadpool(_get_embedding, q.strip(), cfg)
+    except Exception as exc:
+        raise HTTPException(502, f"Embedding failed: {exc}") from exc
+
+    all_rows = session.exec(select(TranscriptEmbedding)).all()
+    if not all_rows:
+        return []
+
+    scored = []
+    for row in all_rows:
+        try:
+            vec = json.loads(row.embedding)
+            sim = _cosine_similarity(query_vec, vec)
+            scored.append((sim, row))
+        except Exception:
+            continue
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:safe_limit]
+
+    results = []
+    for sim, row in top:
+        rec = session.get(Recording, row.recording_id)
+        if not rec:
+            continue
+        start_ts = end_ts = None
+        tr = session.exec(
+            select(Transcript).where(Transcript.recording_id == row.recording_id)
+        ).first()
+        if tr:
+            try:
+                segments = json.loads(tr.json_data).get("segments", [])
+                if 0 <= row.segment_index < len(segments):
+                    seg = segments[row.segment_index]
+                    start_ts = seg.get("start")
+                    end_ts = seg.get("end")
+            except Exception:
+                pass
+        results.append({
+            "recording_id": row.recording_id,
+            "filename": rec.filename,
+            "duration": rec.duration,
+            "segment_index": row.segment_index,
+            "chunk_text": row.chunk_text,
+            "start": start_ts,
+            "end": end_ts,
+            "score": round(sim, 4),
+        })
+
+    return results
 
 
 # ---------------------------------------------------------------------------
