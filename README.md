@@ -37,6 +37,8 @@ AmicoScript keeps everything local.
 - 🌍 Real-time translation to English
 - 🔍 Global search across transcripts
 - 🗂️ Organize with folders and tags
+- 📦 Bulk operations: move to folder, assign/remove tags, export, delete selected recordings
+- 🖱️ Multi-select with checkboxes, Ctrl+click (toggle), or Shift+click (range select)
 - ✏️ Edit individual segments
 - 📤 Export to JSON, SRT, TXT, Markdown
 - ⌨️ Keyboard shortcuts for fast navigation

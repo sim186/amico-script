@@ -793,6 +793,8 @@
           <div id="result-meta-sidebar" class="space-y-2">
             <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">File info</h2>
             <div id="meta-items" class="space-y-1.5"></div>
+            <!-- Folder & tags for the open recording -->
+            <div id="rec-folder-tag-meta" class="hidden pt-1"></div>
           </div>
 
           <!-- Speaker legend -->
@@ -1027,7 +1029,7 @@
             <button data-fmt="md"
               class="export-btn px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none focus:ring-1 focus:ring-brand">MD</button>
             <button id="new-btn"
-              class="ml-2 px-2.5 py-1 rounded-md bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1">
+              class="ml-1 px-2.5 py-1 rounded-md bg-brand text-white text-xs font-medium hover:bg-brand-hover transition focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1">
               + New
             </button>
           </div>
@@ -1168,12 +1170,12 @@
           <div class="flex flex-col h-full">
 
             <!-- Inner tab bar: Transcript / AI Analysis -->
-            <div class="bg-white border-b border-slate-200 px-4 flex items-end gap-0 shrink-0">
+            <div class="bg-white border-b border-slate-200 px-0 flex items-end gap-0 shrink-0">
               <button id="inner-tab-btn-transcript"
-                class="inner-tab-btn px-5 py-2.5 text-sm font-medium border-b-2 border-brand text-brand -mb-px focus:outline-none transition"
+                class="inner-tab-btn px-4 py-3 text-sm font-medium border-b-2 border-brand text-brand -mb-px focus:outline-none transition"
                 aria-selected="true">Transcript</button>
               <button id="inner-tab-btn-ai"
-                class="inner-tab-btn px-5 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 -mb-px focus:outline-none transition"
+                class="inner-tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 -mb-px focus:outline-none transition"
                 aria-selected="false">AI Analysis</button>
             </div>
 
@@ -1393,6 +1395,23 @@
                   </div>
                 </div>
 
+                <!-- Assign tags -->
+                <div class="relative">
+                  <button class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none"
+                    title="Assign tags to selected"
+                    onclick="window.togglePopover(this)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 014-4z"/>
+                    </svg>
+                    Tags
+                  </button>
+                  <div id="lib-bulk-tag-popover" class="popover hidden absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                    <p class="text-xs text-slate-400 px-3 py-1">Toggle tag on all selected</p>
+                    <div id="lib-bulk-tag-list" class="max-h-48 overflow-y-auto"></div>
+                    <p id="lib-bulk-tag-empty" class="hidden px-3 py-2 text-xs text-slate-400">No tags yet — create one in the sidebar</p>
+                  </div>
+                </div>
+
                 <!-- Export -->
                 <div class="relative">
                   <button class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition focus:outline-none"
@@ -1563,7 +1582,11 @@
         sort: 'created_at',
         order: 'desc',
         selectedIds: new Set(),
+        lastSelectedIdx: null,  // for Shift+click range selection
       },
+
+      // Currently open recording (set when opening from library)
+      currentRecording: null,
     };
 
     // Color palette constant and helpers
@@ -2748,6 +2771,38 @@
     </div>
   `).join('');
 
+      // Folder & tags for the current recording
+      const recMeta = state.currentRecording;
+      const recMetaEl = document.getElementById('rec-folder-tag-meta');
+      if (recMetaEl) {
+        if (recMeta) {
+          const folderName = recMeta.folder_id
+            ? (state.library.folders.find(f => f.id === recMeta.folder_id)?.name || null)
+            : null;
+          const tags = recMeta.tags || [];
+          const folderHtml = folderName
+            ? `<div class="flex items-center gap-1.5 text-xs text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+                </svg>
+                <span class="truncate">${escHtml(folderName)}</span>
+              </div>`
+            : '';
+          const tagsHtml = tags.length
+            ? `<div class="flex flex-wrap gap-1 mt-1">${tags.map(t =>
+                `<span class="tag-pill" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>`
+              ).join('')}</div>`
+            : '';
+          recMetaEl.innerHTML = (folderHtml || tagsHtml)
+            ? `<div class="space-y-1">${folderHtml}${tagsHtml}</div>`
+            : '';
+          recMetaEl.classList.toggle('hidden', !folderHtml && !tagsHtml);
+        } else {
+          recMetaEl.innerHTML = '';
+          recMetaEl.classList.add('hidden');
+        }
+      }
+
       // Speaker legend
       renderSpeakerLegend(r.speakers);
 
@@ -3777,6 +3832,26 @@
     // =========================================================================
     // === LIBRARY VIEW ===
     // =========================================================================
+
+    // Returns only folders reachable from the tree root (no orphaned children).
+    function getVisibleFolders() {
+      const all = state.library.folders;
+      const byParent = {};
+      all.forEach(f => {
+        const key = f.parent_id || '__root__';
+        if (!byParent[key]) byParent[key] = [];
+        byParent[key].push(f);
+      });
+      const visible = [];
+      const queue = [...(byParent['__root__'] || [])];
+      while (queue.length) {
+        const f = queue.shift();
+        visible.push(f);
+        (byParent[f.id] || []).forEach(c => queue.push(c));
+      }
+      return visible;
+    }
+
     async function fetchLibrary() {
       const params = new URLSearchParams({ sort: state.library.sort, order: state.library.order, limit: '100' });
       if (state.library.selectedFolderId) params.set('folder_id', state.library.selectedFolderId);
@@ -3803,10 +3878,36 @@
         bulkBar.classList.add('flex');
         normalBar.classList.add('hidden');
         countEl.textContent = `${n} selected`;
-        // Update folder options in the bulk move dropdown
+
+        // Update folder options (only reachable folders)
         const folderSel = document.getElementById('lib-bulk-folder-select');
         folderSel.innerHTML = '<option value="">— No folder —</option>' +
-          state.library.folders.map(f => `<option value="${escHtml(String(f.id))}">${escHtml(f.name)}</option>`).join('');
+          getVisibleFolders().map(f => `<option value="${escHtml(String(f.id))}">${escHtml(f.name)}</option>`).join('');
+
+        // Update tag list for bulk tag assignment
+        const tagList = document.getElementById('lib-bulk-tag-list');
+        const tagEmpty = document.getElementById('lib-bulk-tag-empty');
+        const allTags = state.library.tags;
+        if (allTags.length) {
+          tagEmpty.classList.add('hidden');
+          // For each tag, compute how many selected recordings have it
+          const selectedRecs = state.library.recordings.filter(r => sel.has(r.id));
+          tagList.innerHTML = allTags.map(t => {
+            const count = selectedRecs.filter(r => (r.tags || []).some(rt => rt.id === t.id)).length;
+            const allHave = count === n;
+            const noneHave = count === 0;
+            const stateClass = allHave ? 'text-brand font-semibold' : noneHave ? 'text-slate-600' : 'text-slate-500 italic';
+            const indicator = allHave ? '✓ ' : noneHave ? '' : '− ';
+            return `<button onclick="event.stopPropagation(); bulkAssignTag('${escHtml(t.id)}')"
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 text-left ${stateClass}">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${escHtml(t.color_code)}"></span>
+              ${indicator}${escHtml(t.name)}
+            </button>`;
+          }).join('');
+        } else {
+          tagList.innerHTML = '';
+          tagEmpty.classList.remove('hidden');
+        }
       } else {
         bulkBar.classList.add('hidden');
         bulkBar.classList.remove('flex');
@@ -3826,6 +3927,7 @@
         state.library.recordings.forEach(r => state.library.selectedIds.add(r.id));
       } else {
         state.library.selectedIds.clear();
+        state.library.lastSelectedIdx = null;
       }
       // Sync individual checkboxes
       document.querySelectorAll('.rec-card-cb').forEach(cb => { cb.checked = checked; });
@@ -3853,11 +3955,46 @@
       }
       empty.classList.add('hidden');
       list.innerHTML = '';
-      recs.forEach(rec => {
+      recs.forEach((rec, idx) => {
         const card = document.createElement('div');
         const isSelected = state.library.selectedIds.has(rec.id);
         card.className = 'rec-card' + (isSelected ? ' ring-2 ring-brand ring-inset' : '');
-        card.onclick = () => openRecording(rec);
+        card.onclick = (e) => {
+          // Shift+click: select a range from the last selected index
+          if (e.shiftKey && state.library.lastSelectedIdx !== null) {
+            const lo = Math.min(state.library.lastSelectedIdx, idx);
+            const hi = Math.max(state.library.lastSelectedIdx, idx);
+            for (let i = lo; i <= hi; i++) {
+              state.library.selectedIds.add(recs[i].id);
+            }
+            state.library.lastSelectedIdx = idx;
+            // Sync checkboxes and highlights without a full re-render
+            document.querySelectorAll('.rec-card').forEach((c, ci) => {
+              const inRange = ci >= lo && ci <= hi;
+              if (inRange) {
+                const cb = c.querySelector('.rec-card-cb');
+                if (cb) cb.checked = true;
+                c.classList.add('ring-2', 'ring-brand', 'ring-inset');
+              }
+            });
+            updateBulkBar();
+            return;
+          }
+          // Ctrl/Cmd+click: toggle individual selection without opening
+          if (e.ctrlKey || e.metaKey) {
+            const cb = card.querySelector('.rec-card-cb');
+            const nowSelected = !state.library.selectedIds.has(rec.id);
+            if (nowSelected) { state.library.selectedIds.add(rec.id); } else { state.library.selectedIds.delete(rec.id); }
+            if (cb) cb.checked = nowSelected;
+            card.classList.toggle('ring-2', nowSelected);
+            card.classList.toggle('ring-brand', nowSelected);
+            card.classList.toggle('ring-inset', nowSelected);
+            state.library.lastSelectedIdx = idx;
+            updateBulkBar();
+            return;
+          }
+          openRecording(rec);
+        };
         // enable drag of recordings to folders
         card.draggable = true;
         card.addEventListener('dragstart', (e) => {
@@ -3881,10 +4018,10 @@
           `<span class="tag-pill" data-tag-id="${escHtml(String(t.id))}" data-tag-name="${escHtml(t.name)}" style="background:${escHtml(t.color_code)}">${escHtml(t.name)}</span>`
         ).join('');
 
-        // Folder selector options
+        // Folder selector options (only reachable folders)
         const folderOptions = [
           `<option value="">— No folder —</option>`,
-          ...state.library.folders.map(f =>
+          ...getVisibleFolders().map(f =>
             `<option value="${escHtml(f.id)}" ${rec.folder_id === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>`
           ),
         ].join('');
@@ -3977,6 +4114,9 @@
         cardEl.classList.toggle('ring-brand', checked);
         cardEl.classList.toggle('ring-inset', checked);
       }
+      // Track last toggled index for Shift+click range selection
+      const idx = state.library.recordings.findIndex(r => r.id === id);
+      if (idx !== -1) state.library.lastSelectedIdx = checked ? idx : null;
       updateBulkBar();
     }
 
@@ -4043,6 +4183,39 @@
       if (failed) alert(`${failed} move${failed > 1 ? 's' : ''} failed.`);
       renderLibrary();
       try { fetchFolders(); fetchTags(); } catch (_) { }
+    }
+
+    async function bulkAssignTag(tagId) {
+      const ids = [...state.library.selectedIds];
+      if (!ids.length) return;
+      const tag = state.library.tags.find(t => t.id === tagId);
+      if (!tag) return;
+
+      // Determine current state: if ALL selected have the tag → remove, otherwise → add
+      const selectedRecs = state.library.recordings.filter(r => ids.includes(r.id));
+      const allHave = selectedRecs.every(r => (r.tags || []).some(t => t.id === tagId));
+      const method = allHave ? 'DELETE' : 'POST';
+
+      let failed = 0;
+      for (const id of ids) {
+        try {
+          const res = await fetch(`/api/recordings/${id}/tags/${tagId}`, { method });
+          if (!res.ok) { failed++; continue; }
+          const rec = state.library.recordings.find(r => r.id === id);
+          if (rec) {
+            if (method === 'POST') {
+              if (!rec.tags) rec.tags = [];
+              if (!rec.tags.find(t => t.id === tagId)) rec.tags.push(tag);
+            } else {
+              rec.tags = (rec.tags || []).filter(t => t.id !== tagId);
+            }
+          }
+        } catch (_) { failed++; }
+      }
+      if (failed) alert(`${failed} tag operation${failed > 1 ? 's' : ''} failed.`);
+      // Re-render to update tag pills and refresh the tag popover state
+      renderLibrary();
+      try { fetchTags(); } catch (_) { }
     }
 
     function togglePopover(btn) {
@@ -4151,6 +4324,14 @@
         state.activeSpeakerFilter = null;
         state.currentSegmentId = null;
         state.searchQuery = '';
+
+        // Fetch fresh recording metadata (folder, tags) so the transcript sidebar is accurate
+        try {
+          const recRes = await fetch(`/api/recordings/${rec.id}`);
+          state.currentRecording = recRes.ok ? await recRes.json() : rec;
+        } catch (_) {
+          state.currentRecording = rec;
+        }
 
         // Reset AI analysis panel and inputs
         document.getElementById('ai-result-area').classList.add('hidden');

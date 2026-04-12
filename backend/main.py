@@ -1243,34 +1243,51 @@ def delete_folder(
     if not folder:
         raise HTTPException(404, "Folder not found")
 
-    recordings_in_folder = session.exec(
-        select(Recording).where(Recording.folder_id == folder_id)
-    ).all()
+    # Collect all descendant folder IDs (BFS) so orphaned children are also removed.
+    all_folder_ids: list[str] = [folder_id]
+    queue: list[str] = [folder_id]
+    while queue:
+        current = queue.pop()
+        children = session.exec(
+            select(Folder).where(Folder.parent_id == current)
+        ).all()
+        for child in children:
+            all_folder_ids.append(child.id)
+            queue.append(child.id)
 
-    if delete_recordings:
-        for rec in recordings_in_folder:
-            # Reuse delete logic inline.
-            try:
-                fp = Path(rec.file_path)
-                if fp.exists():
-                    fp.unlink()
-                if fp.parent.exists() and not any(fp.parent.iterdir()):
-                    fp.parent.rmdir()
-            except OSError:
-                pass
-            for link in session.exec(
-                select(RecordingTag).where(RecordingTag.recording_id == rec.id)
-            ).all():
-                session.delete(link)
-            for tr in session.exec(
-                select(Transcript).where(Transcript.recording_id == rec.id)
-            ).all():
-                session.delete(tr)
-            session.delete(rec)
-    else:
-        for rec in recordings_in_folder:
-            rec.folder_id = None
-            session.add(rec)
+    for fid in all_folder_ids:
+        recordings_in_folder = session.exec(
+            select(Recording).where(Recording.folder_id == fid)
+        ).all()
+
+        if delete_recordings:
+            for rec in recordings_in_folder:
+                try:
+                    fp = Path(rec.file_path)
+                    if fp.exists():
+                        fp.unlink()
+                    if fp.parent.exists() and not any(fp.parent.iterdir()):
+                        fp.parent.rmdir()
+                except OSError:
+                    pass
+                for link in session.exec(
+                    select(RecordingTag).where(RecordingTag.recording_id == rec.id)
+                ).all():
+                    session.delete(link)
+                for tr in session.exec(
+                    select(Transcript).where(Transcript.recording_id == rec.id)
+                ).all():
+                    session.delete(tr)
+                session.delete(rec)
+        else:
+            for rec in recordings_in_folder:
+                rec.folder_id = None
+                session.add(rec)
+
+        if fid != folder_id:
+            child_folder = session.get(Folder, fid)
+            if child_folder:
+                session.delete(child_folder)
 
     session.delete(folder)
     session.commit()
