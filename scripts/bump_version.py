@@ -90,9 +90,8 @@ def release_changelog(new_version: str, entry: str | None) -> None:
         new_section = f"\n## [{new_version}] - {today}\n" + "\n".join(lines) + "\n\n"
 
         # keep an Unreleased header at top (empty)
-        new_text = before + unreleased_header + "\n\n" + rest
-        # insert new_section after any leading frontmatter (we'll put it after the first '---' or directly after Unreleased block)
-        new_text = new_text + "\n" + new_section
+        # Insert the new release immediately after the Unreleased block so newest releases appear first
+        new_text = before + unreleased_header + "\n\n" + new_section + rest
         CHANGELOG.write_text(new_text.strip() + "\n", encoding="utf-8")
     else:
         # No Unreleased header, just append
