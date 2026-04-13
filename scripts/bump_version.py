@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import re
 import sys
+import subprocess
+import argparse
 from datetime import date
 from pathlib import Path
 
@@ -64,22 +66,27 @@ def release_changelog(new_version: str, entry: str | None) -> None:
 
     text = CHANGELOG.read_text(encoding="utf-8")
 
-    # Find Unreleased section (first occurrence)
-    unreleased_header = "## [Unreleased]"
-    if unreleased_header in text:
-        before, after = text.split(unreleased_header, 1)
-        # after starts with remainder; locate next section header
-        # we'll move content up to the next '## [' or end
-        m = re.search(r"\n## \[", after)
-        if m:
-            unreleased_content = after[: m.start()].strip()
-            rest = after[m.start() :]
+    # Find Unreleased section (first occurrence) with flexible header forms like
+    # "## [Unreleased]", "[Unreleased]:", etc. If present, insert the new
+    # release immediately after the top introductory text and leave the
+    # Unreleased block intact (don't move its contents into the release).
+    m_unrel = re.search(r"(?m)^(?:##\s*)?\[Unreleased\]\:?", text)
+    if m_unrel:
+        # Split intro (before the Unreleased header) and the remainder starting at Unreleased
+        before = text[: m_unrel.start()]
+        after = text[m_unrel.end():]
+
+        # Extract the Unreleased block content up to the next top-level section (## [...) or EOF
+        m_next = re.search(r"(?m)\n## \[", after)
+        if m_next:
+            unreleased_content = after[: m_next.start()].strip()
+            rest = after[m_next.start():]
         else:
             unreleased_content = after.strip()
             rest = ""
 
-        # compose new version section
-        lines = []
+        # Build lines: include existing Unreleased content first, then the provided entry
+        lines: list[str] = []
         if unreleased_content:
             lines.append(unreleased_content)
         if entry:
@@ -89,9 +96,8 @@ def release_changelog(new_version: str, entry: str | None) -> None:
 
         new_section = f"\n## [{new_version}] - {today}\n" + "\n".join(lines) + "\n\n"
 
-        # keep an Unreleased header at top (empty)
-        # Insert the new release immediately after the Unreleased block so newest releases appear first
-        new_text = before + unreleased_header + "\n\n" + new_section + rest
+        # Replace the Unreleased header + its content with the new version section
+        new_text = before.rstrip() + "\n\n" + new_section + rest.lstrip()
         CHANGELOG.write_text(new_text.strip() + "\n", encoding="utf-8")
     else:
         # No Unreleased header, just append
@@ -100,17 +106,38 @@ def release_changelog(new_version: str, entry: str | None) -> None:
 
 
 def main(argv: list[str]) -> None:
-    if len(argv) < 2:
-        print("Usage: bump_version.py [major|minor|patch] [optional changelog text]")
-        raise SystemExit(2)
-    part = argv[1]
-    entry = " ".join(argv[2:]) if len(argv) > 2 else None
+    parser = argparse.ArgumentParser(description="Bump semantic version and update CHANGELOG.md")
+    parser.add_argument("part", choices=("major", "minor", "patch"))
+    parser.add_argument("entry", nargs="*", help="Optional changelog entry text")
+    parser.add_argument("--create-tag", action="store_true", help="Create a git tag for the new version")
+    parser.add_argument("--push", action="store_true", help="Push created tag to remote 'origin'")
+
+    args = parser.parse_args(argv[1:])
+    part = args.part
+    entry = " ".join(args.entry) if args.entry else None
 
     current = read_version()
     new = bump(current, part)
     write_version(new)
     release_changelog(new, entry)
     print(f"Bumped {current} -> {new}")
+
+    tag_name = f"v{new}"
+    if args.create_tag:
+        try:
+            subprocess.run(["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"], check=True)
+            print(f"Created git tag {tag_name}")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to create git tag {tag_name}: {e}")
+            raise SystemExit(1)
+
+        if args.push:
+            try:
+                subprocess.run(["git", "push", "origin", tag_name], check=True)
+                print(f"Pushed tag {tag_name} to origin")
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to push tag {tag_name}: {e}")
+                raise SystemExit(1)
 
 
 if __name__ == "__main__":

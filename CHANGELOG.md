@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 This project adheres to Semantic Versioning (https://semver.org/) and the
 Keep a Changelog format.
 
-[Unreleased]:
+
+## [1.5.1] - 2026-04-13
 - **Update check**: Added a new feature to check for updates by querying GitHub Releases. The frontend will display a banner if a newer release is available, with a link to view the release notes..
 
 ## [1.5.0] - 2026-04-12
