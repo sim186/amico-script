@@ -109,8 +109,10 @@ def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="Bump semantic version and update CHANGELOG.md")
     parser.add_argument("part", choices=("major", "minor", "patch"))
     parser.add_argument("entry", nargs="*", help="Optional changelog entry text")
-    parser.add_argument("--create-tag", action="store_true", help="Create a git tag for the new version")
-    parser.add_argument("--push", action="store_true", help="Push created tag to remote 'origin'")
+    parser.add_argument("-t", "--create-tag", action="store_true", help="Create a git tag for the new version")
+    parser.add_argument("-p", "--push", action="store_true", help="Push created tag to remote 'origin'")
+    parser.add_argument("-c", "--commit", action="store_true", help="Commit VERSION and CHANGELOG.md with '[skip ci]' message")
+    parser.add_argument("-P", "--push-commit", action="store_true", help="Push the commit to remote 'origin' before tagging")
 
     args = parser.parse_args(argv[1:])
     part = args.part
@@ -123,6 +125,26 @@ def main(argv: list[str]) -> None:
     print(f"Bumped {current} -> {new}")
 
     tag_name = f"v{new}"
+
+    # Optionally commit VERSION and CHANGELOG.md
+    if args.commit:
+        try:
+            subprocess.run(["git", "add", "VERSION", "CHANGELOG.md"], check=True)
+            subprocess.run(["git", "commit", "-m", f"Bump {tag_name} [skip ci]"], check=True)
+            print(f"Created commit for {tag_name}")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to commit VERSION/CHANGELOG.md: {e}")
+            raise SystemExit(1)
+
+        if args.push_commit:
+            try:
+                subprocess.run(["git", "push", "origin", "HEAD"], check=True)
+                print("Pushed commit to origin")
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to push commit: {e}")
+                raise SystemExit(1)
+
+    # Create and optionally push tag (tag will point at current HEAD)
     if args.create_tag:
         try:
             subprocess.run(["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"], check=True)
