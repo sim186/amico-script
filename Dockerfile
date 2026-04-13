@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/ backend/
 COPY frontend/ frontend/
 COPY scripts/ scripts/
+COPY VERSION /app/VERSION
 
 # Temp staging area for uploaded files before they are moved to STORAGE_ROOT.
 RUN mkdir -p backend/uploads

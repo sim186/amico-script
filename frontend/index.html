@@ -991,6 +991,17 @@
        MAIN PANEL
   =================================================================== -->
     <div class="flex-1 flex flex-col min-w-0 h-full">
+      <!-- Update banner (hidden by default). Populated by JS on startup if update available. -->
+      <div id="update-banner" class="hidden bg-yellow-50 border-b border-yellow-100 text-yellow-800 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
+          <div id="update-banner-text" class="text-sm">A new version is available.</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="update-banner-link" class="text-sm font-semibold text-yellow-800 hover:underline" target="_blank" rel="noopener">View release</a>
+          <button id="update-banner-dismiss" class="text-sm text-yellow-700 bg-transparent border-0 px-2 py-1 rounded hover:bg-yellow-100">Dismiss</button>
+        </div>
+      </div>
 
       <!-- Tab bar -->
       <div class="bg-white border-b border-slate-200 px-2 flex items-end gap-1 shrink-0">
@@ -1814,6 +1825,38 @@
         await applyVersion(v);
       } catch (e) {
         await applyVersion('');
+      }
+    }
+
+    // =========================================================================
+    // Latest release / update check
+    // =========================================================================
+    async function fetchLatestRelease() {
+      try {
+        const res = await fetch('/api/latest-release');
+        if (!res.ok) return;
+        const j = await res.json();
+        const updateAvailable = !!j.update_available;
+        const latest = j.latest || {};
+        const local = j.local_version || '';
+        const banner = document.getElementById('update-banner');
+        const text = document.getElementById('update-banner-text');
+        const link = document.getElementById('update-banner-link');
+        const dismiss = document.getElementById('update-banner-dismiss');
+        if (updateAvailable && banner && link && text) {
+          const tag = latest.tag_name || '';
+          const name = latest.name || tag || 'New release';
+          const url = latest.html_url || (`https://github.com/sim186/amico-script/releases`);
+          text.textContent = `Update available: ${name} (local: ${local || 'n/a'})`;
+          link.href = url;
+          link.textContent = 'View release';
+          banner.classList.remove('hidden');
+          if (dismiss) dismiss.addEventListener('click', () => banner.classList.add('hidden'));
+        } else if (banner) {
+          banner.classList.add('hidden');
+        }
+      } catch (e) {
+        // ignore network errors
       }
     }
 
@@ -5193,6 +5236,8 @@
       initLibrary();
       // fetch and display application version
       fetchVersion();
+      // check for updates and show banner if available
+      fetchLatestRelease();
 
       // attach changelog handlers (modal-based viewer)
       (function attachChangelogHandlers() {

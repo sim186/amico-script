@@ -141,6 +141,11 @@ async def _startup() -> None:
     state.event_loop = asyncio.get_event_loop()
     init_db()
     _recover_interrupted_jobs()
+    # Initialize local version early so the frontend can display it.
+    try:
+        app.state.local_version = _get_local_version() or ""
+    except Exception:
+        app.state.local_version = ""
     asyncio.create_task(_cleanup_loop())
     try:
         asyncio.create_task(_release_poller_loop())
@@ -182,8 +187,8 @@ def _get_local_version() -> str:
 
 
 async def _release_poller_loop() -> None:
-    owner = os.environ.get("GITHUB_OWNER", "")
-    repo = os.environ.get("GITHUB_REPO", "")
+    owner = os.environ.get("GITHUB_OWNER", "sim186")
+    repo = os.environ.get("GITHUB_REPO", "AmicoScript")
     token = os.environ.get("GITHUB_TOKEN", "")
     if not owner or not repo:
         return
@@ -541,7 +546,14 @@ def get_models() -> list:
 def api_latest_release() -> dict:
     info = getattr(app.state, "latest_release", {}) or {}
     update = getattr(app.state, "update_available", False)
-    local = getattr(app.state, "local_version", _get_local_version())
+    # Prefer an already-initialised local_version, otherwise compute it.
+    local = getattr(app.state, "local_version", None)
+    if local is None:
+        local = _get_local_version() or ""
+    # If we can't determine the local version, avoid flagging an update as available
+    # because any remote tag will compare as 'newer' against an empty local version.
+    if not str(local).strip():
+        update = False
     return {"latest": info, "update_available": bool(update), "local_version": local}
 
 
