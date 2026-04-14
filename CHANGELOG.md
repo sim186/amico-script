@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 This project adheres to Semantic Versioning (https://semver.org/) and the
 Keep a Changelog format.
 
+## [Unreleased]
+
+### ✨ Improvements
+
+- Backend: Refactored the monolithic transcription pipeline into focused modules under `backend/core/` (`transcription`, `diarization`, `analysis`, `translation`, `audio_utils`, `job_helpers`, `colab_proxy`) and kept `backend/pipeline.py` as a compatibility shim.
+- Backend: Split job processing into explicit phases (`_run_transcription_phase`, `_run_diarization_phase`, `_finalize_transcription_result`, `_handle_colab_job`) with clearer type hints and docstrings.
+- Worker architecture: Replaced thread queue worker startup with a single asyncio background worker task using `asyncio.Queue` for sequential processing.
+- Logging: Added structured JSON logging utilities and centralized job error handling/DB sync helpers.
+- Transcription options: Added configurable `compute_type`, `device`, `device_index`, `vad_filter`, `word_timestamps`, `beam_size`, `best_of`, and `force_normalize_audio` via a new `TranscriptionConfig` model.
+- Audio processing: Unified normalization paths with `_normalize_audio` and kept explicit wrappers for transcription/diarization.
+- Database: Added indexes for frequently queried fields (`recording.status`, `recording.created_at`, `transcript.recording_id`, `transcript.created_at`) and moved models to a package layout under `backend/models/`.
+
 
 ## [1.5.1] - 2026-04-13
 - **Update check**: Added a new feature to check for updates by querying GitHub Releases. The frontend will display a banner if a newer release is available, with a link to view the release notes..

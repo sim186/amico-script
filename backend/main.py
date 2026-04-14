@@ -15,11 +15,11 @@ import json
 import os
 import re
 import sys
-import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Optional
+import threading
 
 # Must be set before torch is imported anywhere (even transitively).
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -60,10 +60,12 @@ from sqlalchemy import func
 from sse_starlette.sse import EventSourceResponse
 
 import state
+from core.job_helpers import _append_job_log, _cleanup_job_temp_files, _push_event
+from core.transcription_config import TranscriptionConfig
+from core.transcription import _worker_loop_async
 from db import get_session, init_db, new_session
 from exports import _format_json, _format_srt, _format_txt, _format_md
 from models import Analysis, Folder, Recording, RecordingTag, Tag, Transcript
-from pipeline import _append_job_log, _cleanup_job_temp_files, _push_event, _worker_loop
 from releases import _fetch_latest_release, _is_version_newer
 from settings import _get_llm_settings, _get_saved_hf_token, _load_settings, _save_llm_settings, _save_settings
 from storage import get_recording_audio_path, ingest_file
@@ -132,13 +134,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Start the single background worker thread (sequential job processing).
-threading.Thread(target=_worker_loop, daemon=True).start()
-
-
 @app.on_event("startup")
 async def _startup() -> None:
-    state.event_loop = asyncio.get_event_loop()
+    state.event_loop = asyncio.get_running_loop()
     init_db()
     _recover_interrupted_jobs()
     # Initialize local version early so the frontend can display it.
@@ -146,6 +144,7 @@ async def _startup() -> None:
         app.state.local_version = _get_local_version() or ""
     except Exception:
         app.state.local_version = ""
+    asyncio.create_task(_worker_loop_async())
     asyncio.create_task(_cleanup_loop())
     try:
         asyncio.create_task(_release_poller_loop())
@@ -456,12 +455,13 @@ async def create_analysis(
         "error": None,
         "created_at": time.time(),
         "sse_queue": asyncio.Queue(),
+        "event_loop": asyncio.get_running_loop(),
         "cancel_flag": threading.Event(),
         "logs": [],
         "temp_files": [],
     }
     state.jobs[job_id] = job
-    state.JOB_QUEUE.put(job_id)
+    state.JOB_QUEUE.put_nowait(job_id)
     return {"job_id": job_id, "analysis_id": analysis_id}
 
 
@@ -572,6 +572,14 @@ async def transcribe(
     num_speakers: str = Form(""),
     min_speakers: str = Form(""),
     max_speakers: str = Form(""),
+    compute_type: str = Form("int8"),
+    device: str = Form("auto"),
+    device_index: str = Form("0"),
+    vad_filter: str = Form("true"),
+    word_timestamps: str = Form("false"),
+    beam_size: str = Form("5"),
+    best_of: str = Form("5"),
+    force_normalize_audio: str = Form("false"),
     folder_id: str = Form(""),
 ) -> dict:
     ext = Path(file.filename or "").suffix.lower()
@@ -591,15 +599,31 @@ async def transcribe(
     recording_id = str(uuid.uuid4())
     permanent_path = ingest_file(staging, recording_id)
 
-    opts_dict = {
-        "model": model,
-        "language": language,
-        "diarize": diarize.lower() == "true",
-        "colab_url": colab_url,
-        "num_speakers": int(num_speakers) if num_speakers.isdigit() else None,
-        "min_speakers": int(min_speakers) if min_speakers.isdigit() else None,
-        "max_speakers": int(max_speakers) if max_speakers.isdigit() else None,
-    }
+    def _to_bool(value: str, default: bool = False) -> bool:
+        text = (value or "").strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off"}:
+            return False
+        return default
+
+    opts_dict = TranscriptionConfig(
+        model=model,
+        language=language,
+        diarize=_to_bool(diarize),
+        colab_url=colab_url,
+        num_speakers=int(num_speakers) if num_speakers.isdigit() else None,
+        min_speakers=int(min_speakers) if min_speakers.isdigit() else None,
+        max_speakers=int(max_speakers) if max_speakers.isdigit() else None,
+        compute_type=(compute_type or "int8"),
+        device=(device or "auto"),
+        device_index=int(device_index) if str(device_index).isdigit() else 0,
+        vad_filter=_to_bool(vad_filter, default=True),
+        word_timestamps=_to_bool(word_timestamps),
+        beam_size=int(beam_size) if str(beam_size).isdigit() else 5,
+        best_of=int(best_of) if str(best_of).isdigit() else 5,
+        force_normalize_audio=_to_bool(force_normalize_audio),
+    ).model_dump()
 
     try:
         with new_session() as session:
@@ -632,13 +656,14 @@ async def transcribe(
         "error": None,
         "created_at": time.time(),
         "sse_queue": asyncio.Queue(),
+        "event_loop": asyncio.get_running_loop(),
         "cancel_flag": threading.Event(),
         "logs": [],
         "temp_files": [],
     }
     state.jobs[job_id] = job
     _append_job_log(job_id, "INFO", f"Job created for file '{job['original_filename']}'")
-    state.JOB_QUEUE.put(job_id)
+    state.JOB_QUEUE.put_nowait(job_id)
     return {"job_id": job_id, "recording_id": recording_id}
 
 
@@ -1041,7 +1066,7 @@ async def translate_segment_api(
     segment_index: int,
     session: Session = Depends(get_session),
 ) -> dict:
-    from pipeline import _translate_audio_chunk
+    from core.translation import _translate_audio_chunk
     
     rec = session.get(Recording, recording_id)
     if not rec:
@@ -1113,13 +1138,14 @@ async def translate_all_api(
         "error": None,
         "created_at": time.time(),
         "sse_queue": asyncio.Queue(),
+        "event_loop": asyncio.get_running_loop(),
         "cancel_flag": threading.Event(),
         "logs": [],
         "temp_files": [],
     }
     state.jobs[job_id] = job
     _append_job_log(job_id, "INFO", f"Bulk translation job created for recording '{rec.filename}'")
-    state.JOB_QUEUE.put(job_id)
+    state.JOB_QUEUE.put_nowait(job_id)
     
     return {"ok": True, "job_id": job_id}
 

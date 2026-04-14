@@ -78,6 +78,12 @@ def init_db() -> None:
             END
         """))
 
+        # Backfill indexes for older DBs that predate indexed SQLModel fields.
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_recording_status ON recording(status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_recording_created_at ON recording(created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transcript_recording_id ON transcript(recording_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transcript_created_at ON transcript(created_at)"))
+
 
 def get_session():
     """FastAPI dependency — yields a session and commits/rolls back on exit."""
