@@ -6,6 +6,9 @@ Keep a Changelog format.
 
 ## [Unreleased]
 
+
+
+## [1.6.0] - 2026-04-14
 ### ✨ Improvements
 
 - Backend: Refactored the monolithic transcription pipeline into focused modules under `backend/core/` (`transcription`, `diarization`, `analysis`, `translation`, `audio_utils`, `job_helpers`, `colab_proxy`) and kept `backend/pipeline.py` as a compatibility shim.
@@ -15,7 +18,7 @@ Keep a Changelog format.
 - Transcription options: Added configurable `compute_type`, `device`, `device_index`, `vad_filter`, `word_timestamps`, `beam_size`, `best_of`, and `force_normalize_audio` via a new `TranscriptionConfig` model.
 - Audio processing: Unified normalization paths with `_normalize_audio` and kept explicit wrappers for transcription/diarization.
 - Database: Added indexes for frequently queried fields (`recording.status`, `recording.created_at`, `transcript.recording_id`, `transcript.created_at`) and moved models to a package layout under `backend/models/`.
-
+- No change details provided.
 
 ## [1.5.1] - 2026-04-13
 - **Update check**: Added a new feature to check for updates by querying GitHub Releases. The frontend will display a banner if a newer release is available, with a link to view the release notes..
@@ -121,4 +124,3 @@ Keep a Changelog format.
 
 ## [1.5.2] - 2026-04-13
 - Changelog entry
-
