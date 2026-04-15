@@ -2,6 +2,8 @@ import json
 import threading
 from pathlib import Path
 
+import pytest
+
 import state
 from core import colab_proxy
 
@@ -113,3 +115,25 @@ def test_handle_colab_job_error_status_flow(tmp_path, monkeypatch):
     assert state.jobs[job_id]["error"] == "remote failed"
     assert any(args[1] == "error" for args, _ in pushed)
     assert sync_calls == [job_id]
+
+
+def test_handle_colab_job_400_includes_remote_detail(tmp_path, monkeypatch):
+    job_id = _build_job(tmp_path)
+
+    class _BadRequestResponse:
+        status_code = 400
+        reason = "Bad Request"
+
+        def raise_for_status(self):
+            raise requests.HTTPError("400 Client Error", response=self)
+
+        def json(self):
+            return {"detail": "Unsupported file type: .webm"}
+
+    import requests
+
+    monkeypatch.setattr(colab_proxy.requests, "post", lambda *_args, **_kwargs: _BadRequestResponse())
+
+    colab_proxy._handle_colab_job(job_id)
+
+    assert "Unsupported file type: .webm" in (state.jobs[job_id].get("error") or "")

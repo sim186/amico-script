@@ -1,11 +1,49 @@
 """Colab proxy job processing."""
 import json
+from pathlib import Path
 
 import requests
 
 import state
 from core.job_helpers import _append_job_log, _handle_job_error, _push_event, _sync_job_to_db
 from core.messages import COLAB_UPLOADING, TRANSCRIPTION_CANCELLED, TRANSCRIPTION_COMPLETE
+
+
+COLAB_SAFE_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".mp4", ".mov", ".mkv", ".opus"}
+
+
+def _colab_upload_filename(job: dict) -> str:
+    """Build a filename acceptable by the remote Colab endpoint validation."""
+    original = str(job.get("original_filename") or "").strip()
+    original_ext = Path(original).suffix.lower()
+    if original and original_ext in COLAB_SAFE_EXTENSIONS:
+        return original
+
+    file_ext = Path(str(job.get("file_path") or "")).suffix.lower()
+    if file_ext in COLAB_SAFE_EXTENSIONS:
+        return f"source{file_ext}"
+
+    # Some providers produce .webm or other extensions rejected by strict remote validators.
+    # Use an allowed container extension; ffmpeg can still probe the real media stream.
+    return "source.mp4"
+
+
+def _raise_with_response_detail(exc: requests.HTTPError) -> None:
+    """Raise RuntimeError with upstream response detail when available."""
+    response = exc.response
+    if response is None:
+        raise exc
+
+    detail = ""
+    try:
+        payload = response.json()
+        detail = payload.get("detail") if isinstance(payload, dict) else ""
+    except ValueError:
+        detail = response.text.strip()
+
+    if detail:
+        raise RuntimeError(f"Colab API {response.status_code}: {detail}") from exc
+    raise RuntimeError(f"Colab API {response.status_code}: {response.reason}") from exc
 
 
 def _handle_colab_job(job_id: str) -> None:
@@ -20,7 +58,7 @@ def _handle_colab_job(job_id: str) -> None:
 
     try:
         with open(file_path, "rb") as fh:
-            files = {"file": (job.get("original_filename", "audio.wav"), fh)}
+            files = {"file": (_colab_upload_filename(job), fh)}
             data = {
                 "model": opts.get("model", "small"),
                 "language": opts.get("language", ""),
@@ -29,6 +67,14 @@ def _handle_colab_job(job_id: str) -> None:
                 "num_speakers": opts.get("num_speakers", "") or "",
                 "min_speakers": opts.get("min_speakers", "") or "",
                 "max_speakers": opts.get("max_speakers", "") or "",
+                "compute_type": opts.get("compute_type", "int8"),
+                "device": opts.get("device", "auto"),
+                "device_index": str(opts.get("device_index", 0)),
+                "vad_filter": "true" if opts.get("vad_filter", True) else "false",
+                "word_timestamps": "true" if opts.get("word_timestamps") else "false",
+                "beam_size": str(opts.get("beam_size", 5)),
+                "best_of": str(opts.get("best_of", 5)),
+                "force_normalize_audio": "true" if opts.get("force_normalize_audio") else "false",
             }
             resp = requests.post(
                 f"{colab_url}/api/transcribe",
@@ -36,7 +82,10 @@ def _handle_colab_job(job_id: str) -> None:
                 data=data,
                 timeout=(30, 3600),
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except requests.HTTPError as exc:
+                _raise_with_response_detail(exc)
             colab_job_id = resp.json()["job_id"]
 
         _append_job_log(job_id, "INFO", f"Colab job created: {colab_job_id}")
@@ -91,6 +140,6 @@ def _handle_colab_job(job_id: str) -> None:
 
                 _push_event(job_id, st, pr, msg, data=event_data.get("data"))
 
-    except (requests.RequestException, ValueError, KeyError, OSError) as exc:
+    except (requests.RequestException, ValueError, KeyError, OSError, RuntimeError) as exc:
         _append_job_log(job_id, "ERROR", f"Colab proxy failed: {exc}")
         _handle_job_error(job_id, exc)
