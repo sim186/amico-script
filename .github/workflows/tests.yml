@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          pytest -q tests/test_diarization.py tests/test_audio_utils.py tests/test_transcription_model_cache.py tests/test_error_classifiers.py tests/test_transcription_flow.py tests/test_colab_proxy_flow.py tests/test_job_helpers_sync_retry.py tests/test_settings.py
