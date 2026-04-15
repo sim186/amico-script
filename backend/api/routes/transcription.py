@@ -7,16 +7,18 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 import aiofiles
 import state
 from core.job_helpers import _append_job_log
+from core.source_downloader import DownloadCandidate, is_supported_source_url, resolve_source_candidates
 from core.transcription_config import TranscriptionConfig
 from db import get_session, new_session
 from exports import _format_json, _format_md, _format_srt, _format_txt
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from models import Recording, Transcript
+from models import Recording, RecordingTag, Tag, Transcript
 from settings import _get_saved_hf_token
 from sqlmodel import Session, select
 from sse_starlette.sse import EventSourceResponse
@@ -26,6 +28,16 @@ from storage import ingest_file
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".mp4", ".mov", ".mkv", ".opus"}
+
+PLATFORM_TAG_COLORS = {
+    "youtube": "#ff0000",
+    "x": "#111111",
+    "facebook": "#1877f2",
+    "instagram": "#e1306c",
+    "tiktok": "#25f4ee",
+    "vimeo": "#1ab7ea",
+    "twitch": "#9146ff",
+}
 
 
 def _get_job(job_id: str) -> dict:
@@ -49,6 +61,131 @@ def _to_bool(value: str, default: bool = False) -> bool:
     if text in {"0", "false", "no", "off"}:
         return False
     return default
+
+
+def _build_transcription_options(
+    model: str,
+    language: str,
+    diarize: str,
+    colab_url: str,
+    num_speakers: str,
+    min_speakers: str,
+    max_speakers: str,
+    compute_type: str,
+    device: str,
+    device_index: str,
+    vad_filter: str,
+    word_timestamps: str,
+    beam_size: str,
+    best_of: str,
+    force_normalize_audio: str,
+) -> dict[str, Any]:
+    return TranscriptionConfig(
+        model=model,
+        language=language,
+        diarize=_to_bool(diarize),
+        colab_url=colab_url,
+        num_speakers=int(num_speakers) if num_speakers.isdigit() else None,
+        min_speakers=int(min_speakers) if min_speakers.isdigit() else None,
+        max_speakers=int(max_speakers) if max_speakers.isdigit() else None,
+        compute_type=(compute_type or "int8"),
+        device=(device or "auto"),
+        device_index=int(device_index) if str(device_index).isdigit() else 0,
+        vad_filter=_to_bool(vad_filter, default=True),
+        word_timestamps=_to_bool(word_timestamps),
+        beam_size=int(beam_size) if str(beam_size).isdigit() else 5,
+        best_of=int(best_of) if str(best_of).isdigit() else 5,
+        force_normalize_audio=_to_bool(force_normalize_audio),
+    ).model_dump()
+
+
+def _create_recording_row(
+    recording_id: str,
+    filename: str,
+    file_path: str,
+    folder_id: str,
+    opts_dict: dict[str, Any],
+) -> None:
+    try:
+        with new_session() as session:
+            recording = Recording(
+                id=recording_id,
+                filename=filename or "audio",
+                file_path=file_path,
+                folder_id=folder_id or None,
+                status="queued",
+                transcription_options=json.dumps(opts_dict),
+            )
+            session.add(recording)
+            session.commit()
+    except Exception:
+        pass
+
+
+def _create_job(
+    *,
+    job_id: str,
+    recording_id: str,
+    original_filename: str,
+    file_path: str,
+    opts_dict: dict[str, Any],
+    hf_token: str,
+    job_type: str = "transcribe",
+    source_url: str = "",
+    source_platform: str = "",
+) -> None:
+    state.jobs[job_id] = {
+        "id": job_id,
+        "type": job_type,
+        "recording_id": recording_id,
+        "status": "queued",
+        "progress": 0.0,
+        "message": "Queued",
+        "file_path": file_path,
+        "original_filename": original_filename,
+        "options": {**opts_dict, "hf_token": hf_token or _get_saved_hf_token()},
+        "source_url": source_url,
+        "source_platform": source_platform,
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+        "sse_queue": asyncio.Queue(),
+        "event_loop": asyncio.get_running_loop(),
+        "cancel_flag": threading.Event(),
+        "logs": [],
+        "temp_files": [],
+    }
+    _append_job_log(job_id, "INFO", f"Job created for source '{original_filename}'")
+    state.JOB_QUEUE.put_nowait(job_id)
+
+
+def _ensure_recording_platform_tag(recording_id: str, platform: str) -> None:
+    """Attach a platform tag (e.g., youtube, tiktok) to a recording when provided."""
+    platform_name = (platform or "").strip().lower()
+    if not platform_name or platform_name == "web":
+        return
+
+    try:
+        with new_session() as session:
+            desired_color = PLATFORM_TAG_COLORS.get(platform_name, "#60a5fa")
+            tag = session.exec(select(Tag).where(Tag.name == platform_name)).first()
+            if not tag:
+                tag = Tag(name=platform_name, color_code=desired_color)
+                session.add(tag)
+                session.commit()
+                session.refresh(tag)
+            elif tag.color_code != desired_color and platform_name in PLATFORM_TAG_COLORS:
+                tag.color_code = desired_color
+                session.add(tag)
+                session.commit()
+
+            existing = session.get(RecordingTag, (recording_id, tag.id))
+            if not existing:
+                session.add(RecordingTag(recording_id=recording_id, tag_id=tag.id))
+                session.commit()
+    except Exception:
+        # Tagging should not fail the transcription flow.
+        pass
 
 
 @router.post("/api/transcribe")
@@ -85,60 +222,143 @@ async def transcribe(
     recording_id = str(uuid.uuid4())
     permanent_path = ingest_file(staging, recording_id)
 
-    opts_dict = TranscriptionConfig(
+    opts_dict = _build_transcription_options(
         model=model,
         language=language,
-        diarize=_to_bool(diarize),
+        diarize=diarize,
         colab_url=colab_url,
-        num_speakers=int(num_speakers) if num_speakers.isdigit() else None,
-        min_speakers=int(min_speakers) if min_speakers.isdigit() else None,
-        max_speakers=int(max_speakers) if max_speakers.isdigit() else None,
-        compute_type=(compute_type or "int8"),
-        device=(device or "auto"),
-        device_index=int(device_index) if str(device_index).isdigit() else 0,
-        vad_filter=_to_bool(vad_filter, default=True),
-        word_timestamps=_to_bool(word_timestamps),
-        beam_size=int(beam_size) if str(beam_size).isdigit() else 5,
-        best_of=int(best_of) if str(best_of).isdigit() else 5,
-        force_normalize_audio=_to_bool(force_normalize_audio),
-    ).model_dump()
+        num_speakers=num_speakers,
+        min_speakers=min_speakers,
+        max_speakers=max_speakers,
+        compute_type=compute_type,
+        device=device,
+        device_index=device_index,
+        vad_filter=vad_filter,
+        word_timestamps=word_timestamps,
+        beam_size=beam_size,
+        best_of=best_of,
+        force_normalize_audio=force_normalize_audio,
+    )
+
+    _create_recording_row(
+        recording_id=recording_id,
+        filename=file.filename or "audio",
+        file_path=str(permanent_path),
+        folder_id=folder_id,
+        opts_dict=opts_dict,
+    )
+
+    _create_job(
+        job_id=job_id,
+        recording_id=recording_id,
+        original_filename=file.filename or "audio",
+        file_path=str(permanent_path),
+        opts_dict=opts_dict,
+        hf_token=hf_token,
+    )
+    return {"job_id": job_id, "recording_id": recording_id}
+
+
+@router.post("/api/transcribe/url")
+async def transcribe_from_url(
+    source_url: str = Form(...),
+    allow_playlist: str = Form("true"),
+    model: str = Form("small"),
+    language: str = Form(""),
+    diarize: str = Form("false"),
+    colab_url: str = Form(""),
+    hf_token: str = Form(""),
+    num_speakers: str = Form(""),
+    min_speakers: str = Form(""),
+    max_speakers: str = Form(""),
+    compute_type: str = Form("int8"),
+    device: str = Form("auto"),
+    device_index: str = Form("0"),
+    vad_filter: str = Form("true"),
+    word_timestamps: str = Form("false"),
+    beam_size: str = Form("5"),
+    best_of: str = Form("5"),
+    force_normalize_audio: str = Form("false"),
+    folder_id: str = Form(""),
+) -> dict:
+    normalized_url = (source_url or "").strip()
+    if not normalized_url:
+        raise HTTPException(400, "A source URL is required")
+    if not is_supported_source_url(normalized_url):
+        raise HTTPException(400, "Unsupported source URL. Please provide a valid http(s) URL.")
+
+    include_playlist = _to_bool(allow_playlist, default=True)
 
     try:
-        with new_session() as session:
-            recording = Recording(
-                id=recording_id,
-                filename=file.filename or "audio",
-                file_path=str(permanent_path),
-                folder_id=folder_id or None,
-                status="queued",
-                transcription_options=json.dumps(opts_dict),
-            )
-            session.add(recording)
-            session.commit()
-    except Exception:
-        pass
+        candidates: list[DownloadCandidate] = resolve_source_candidates(normalized_url, include_playlist=include_playlist)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to inspect URL: {exc}") from exc
 
-    state.jobs[job_id] = {
-        "id": job_id,
-        "recording_id": recording_id,
-        "status": "queued",
-        "progress": 0.0,
-        "message": "Queued",
-        "file_path": str(permanent_path),
-        "original_filename": file.filename or "audio",
-        "options": {**opts_dict, "hf_token": hf_token or _get_saved_hf_token()},
-        "result": None,
-        "error": None,
-        "created_at": time.time(),
-        "sse_queue": asyncio.Queue(),
-        "event_loop": asyncio.get_running_loop(),
-        "cancel_flag": threading.Event(),
-        "logs": [],
-        "temp_files": [],
+    if not candidates:
+        raise HTTPException(400, "No downloadable entries found for this URL")
+
+    opts_dict = _build_transcription_options(
+        model=model,
+        language=language,
+        diarize=diarize,
+        colab_url=colab_url,
+        num_speakers=num_speakers,
+        min_speakers=min_speakers,
+        max_speakers=max_speakers,
+        compute_type=compute_type,
+        device=device,
+        device_index=device_index,
+        vad_filter=vad_filter,
+        word_timestamps=word_timestamps,
+        beam_size=beam_size,
+        best_of=best_of,
+        force_normalize_audio=force_normalize_audio,
+    )
+
+    jobs: list[dict[str, str]] = []
+    for candidate in candidates:
+        recording_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())
+        display_name = candidate.title or "Online audio"
+
+        _create_recording_row(
+            recording_id=recording_id,
+            filename=display_name,
+            file_path="",
+            folder_id=folder_id,
+            opts_dict=opts_dict,
+        )
+        _ensure_recording_platform_tag(recording_id, candidate.platform)
+
+        _create_job(
+            job_id=job_id,
+            recording_id=recording_id,
+            original_filename=display_name,
+            file_path="",
+            opts_dict=opts_dict,
+            hf_token=hf_token,
+            job_type="download_transcribe",
+            source_url=candidate.url,
+            source_platform=candidate.platform,
+        )
+        jobs.append(
+            {
+                "job_id": job_id,
+                "recording_id": recording_id,
+                "title": display_name,
+                "source_url": candidate.url,
+                "platform": candidate.platform,
+            }
+        )
+
+    return {
+        "count": len(jobs),
+        "jobs": jobs,
+        "first_job_id": jobs[0]["job_id"],
+        "first_recording_id": jobs[0]["recording_id"],
     }
-    _append_job_log(job_id, "INFO", f"Job created for file '{state.jobs[job_id]['original_filename']}'")
-    state.JOB_QUEUE.put_nowait(job_id)
-    return {"job_id": job_id, "recording_id": recording_id}
 
 
 @router.get("/api/jobs/{job_id}/stream")

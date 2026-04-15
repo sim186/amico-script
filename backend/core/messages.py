@@ -1,5 +1,8 @@
 """Shared worker/user-facing status messages."""
 
+DOWNLOAD_STARTING = "Fetching audio from source URL..."
+DOWNLOAD_PREPARING = "Preparing downloaded audio for transcription..."
+
 TRANSCRIPTION_LOADING_MODEL = "Loading model '{model}'..."
 TRANSCRIPTION_STARTING = (
     "Starting transcription (first progress update may take time on long files/CPU)..."
