@@ -1090,7 +1090,7 @@
               <div>
                 <p class="font-medium text-slate-700">Drop files or a folder here, or <span class="text-brand">browse files</span></p>
                 <p class="mt-1 text-xs text-slate-400">MP3 · WAV · M4A · OGG · FLAC · MP4 · MOV · MKV · OPUS</p>
-                <p class="mt-2 text-xs text-slate-400">or <button id="folder-btn" class="text-brand hover:underline focus:outline-none" type="button">select a folder</button></p>
+                <p class="mt-2 text-xs text-slate-400">or <button id="folder-btn" class="text-brand hover:underline focus:outline-none" type="button">select a folder</button> · <button id="paste-link-btn" class="text-brand hover:underline focus:outline-none" type="button">paste video link</button></p>
               </div>
             </div>
 
@@ -1980,6 +1980,13 @@
       zone.addEventListener('drop', async e => {
         e.preventDefault();
         zone.classList.remove('border-brand', 'bg-brand-muted/20');
+
+        const droppedText = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '').trim();
+        if (!e.dataTransfer.files.length && isLikelyUrl(droppedText)) {
+          startUrlTranscription(droppedText);
+          return;
+        }
+
         const items = Array.from(e.dataTransfer.items);
         // Check if any item is a directory entry
         const hasEntry = items.length && items[0].webkitGetAsEntry;
@@ -1999,9 +2006,23 @@
         else if (files.length > 1) handleFiles(files);
       });
 
+      zone.addEventListener('paste', e => {
+        const text = (e.clipboardData?.getData('text/plain') || '').trim();
+        if (isLikelyUrl(text)) {
+          e.preventDefault();
+          startUrlTranscription(text);
+        }
+      });
+
       document.getElementById('folder-btn').addEventListener('click', e => {
         e.stopPropagation();
         document.getElementById('folder-input').click();
+      });
+      document.getElementById('paste-link-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        const value = window.prompt('Paste a video URL (YouTube, TikTok, Instagram, Facebook, X, Vimeo, Twitch...)', '');
+        if (!value) return;
+        startUrlTranscription(value);
       });
       document.getElementById('folder-input').addEventListener('change', () => {
         const files = Array.from(document.getElementById('folder-input').files);
@@ -2193,6 +2214,16 @@
       return b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
     }
 
+    function isLikelyUrl(value) {
+      if (!value) return false;
+      try {
+        const u = new URL(value.trim());
+        return u.protocol === 'http:' || u.protocol === 'https:';
+      } catch (_) {
+        return false;
+      }
+    }
+
     // =========================================================================
     // Diarization toggle
     // =========================================================================
@@ -2296,6 +2327,68 @@
         xhr.onerror = () => reject(new Error('Network error — check your connection'));
         xhr.send(fd);
       });
+    }
+
+    function makeUrlFormData(urlValue) {
+      const fd = new FormData();
+      fd.append('source_url', urlValue);
+      fd.append('allow_playlist', 'true');
+      fd.append('model', state.selectedModel);
+      fd.append('language', state.selectedLanguage);
+      fd.append('diarize', state.diarize ? 'true' : 'false');
+      if (state.cloudPower) fd.append('colab_url', state.colabUrl);
+      fd.append('hf_token', state.hfToken);
+      fd.append('num_speakers', state.numSpeakers);
+      fd.append('min_speakers', state.minSpeakers);
+      fd.append('max_speakers', state.maxSpeakers);
+      return fd;
+    }
+
+    async function startUrlTranscription(urlArg = '') {
+      const urlValue = String(urlArg || '').trim();
+      if (!urlValue) {
+        showError('Paste a video URL first.');
+        return;
+      }
+
+      hideError();
+      clearFile();
+      setProcessing(true);
+      document.getElementById('proc-filename').textContent = urlValue;
+      document.getElementById('proc-message').textContent = 'Queueing URL...';
+      document.getElementById('progress-bar').style.width = '0%';
+      document.getElementById('proc-percent').textContent = '0%';
+      document.getElementById('progress-bar-wrap').setAttribute('aria-valuenow', '0');
+
+      clientLog(`Queueing online source: ${urlValue}`);
+
+      try {
+        const res = await fetch('/api/transcribe/url', { method: 'POST', body: makeUrlFormData(urlValue) });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload.detail || `HTTP ${res.status}`);
+        }
+
+        const count = Number(payload.count || 0);
+        if (!payload.first_job_id) {
+          throw new Error('No job returned by backend');
+        }
+
+        state.jobId = payload.first_job_id;
+        state.recordingId = payload.first_recording_id || null;
+        state.activeRecordingId = null;
+
+        if (count > 1) {
+          clientLog(`Playlist import queued ${count} jobs. Showing progress for the first item.`);
+        } else {
+          clientLog(`Source queued — job ${payload.first_job_id}`);
+        }
+
+        connectSSE(payload.first_job_id);
+      } catch (err) {
+        setProcessing(false);
+        showError(`URL import failed: ${err.message}`);
+      }
     }
 
     // =========================================================================

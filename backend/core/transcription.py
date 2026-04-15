@@ -4,6 +4,7 @@ import gc
 import os
 import shutil
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ from core.job_helpers import (
 )
 from core.messages import (
     COLAB_UPLOADING,
+    DOWNLOAD_PREPARING,
+    DOWNLOAD_STARTING,
     TRANSCRIPTION_CANCELLED,
     TRANSCRIPTION_COMPLETE,
     TRANSCRIPTION_GPU_FALLBACK,
@@ -29,7 +32,11 @@ from core.messages import (
     TRANSCRIPTION_TIMEOUT_FIRST_SEGMENT,
     TRANSCRIPTION_WAITING_FIRST_SEGMENT,
 )
+from core.source_downloader import download_source_audio
+from db import new_session
 from exports import _ts as format_timestamp
+from models import Recording
+from storage import ingest_file
 
 
 def _is_missing_cuda_runtime_error(exc: Exception) -> bool:
@@ -107,8 +114,14 @@ def _run_transcription_phase(job_id: str) -> tuple[list[dict], dict]:
     job = state.jobs[job_id]
     opts = job["options"]
     file_path = job["file_path"]
+    current_progress = float(job.get("progress", 0.0) or 0.0)
 
-    _push_event(job_id, "loading_model", 0.03, TRANSCRIPTION_LOADING_MODEL.format(model=opts["model"]))
+    _push_event(
+        job_id,
+        "loading_model",
+        max(current_progress, 0.03),
+        TRANSCRIPTION_LOADING_MODEL.format(model=opts["model"]),
+    )
 
     model, model_device = _get_whisper_model(
         opts["model"],
@@ -120,7 +133,7 @@ def _run_transcription_phase(job_id: str) -> tuple[list[dict], dict]:
     _push_event(
         job_id,
         "transcribing",
-        0.05,
+        max(float(job.get("progress", 0.0) or 0.0), 0.05),
         TRANSCRIPTION_STARTING,
     )
 
@@ -160,7 +173,7 @@ def _run_transcription_phase(job_id: str) -> tuple[list[dict], dict]:
             _push_event(
                 job_id,
                 "transcribing",
-                0.05,
+                max(float(job.get("progress", 0.0) or 0.0), 0.05),
                 TRANSCRIPTION_WAITING_FIRST_SEGMENT.format(seconds=waited_seconds),
             )
             if waited_seconds >= 600:
@@ -235,6 +248,7 @@ def _run_transcription_phase(job_id: str) -> tuple[list[dict], dict]:
                 return [], {"cancelled": True}
 
             progress = 0.05 + 0.75 * min(seg.end / duration, 1.0)
+            progress = max(float(job.get("progress", 0.0) or 0.0), progress)
             seg_dict = {
                 "id": len(segments_list),
                 "start": round(seg.start, 3),
@@ -300,6 +314,58 @@ def _finalize_transcription_result(
     return result
 
 
+def _run_download_phase(job_id: str) -> None:
+    """Download source audio and materialize it into managed recording storage."""
+    job = state.jobs[job_id]
+    source_url = (job.get("source_url") or "").strip()
+    if not source_url:
+        raise RuntimeError("Missing source URL for download job")
+
+    _push_event(job_id, "downloading", 0.01, DOWNLOAD_STARTING)
+
+    from config import STORAGE_ROOT
+
+    download_dir = STORAGE_ROOT / "downloads" / job_id
+
+    def _progress(status: str, progress: float, message: str) -> None:
+        if status == "downloading":
+            mapped = 0.02 + (0.16 * min(max(progress, 0.0), 1.0))
+            _push_event(job_id, "downloading", mapped, message)
+        elif status == "postprocessing":
+            _push_event(job_id, "downloading", 0.19, DOWNLOAD_PREPARING)
+
+    downloaded_path, detected_title = download_source_audio(source_url, download_dir, on_progress=_progress)
+    if not downloaded_path.exists():
+        raise RuntimeError("Downloaded file was not found on disk")
+
+    recording_id = str(job.get("recording_id") or "")
+    if not recording_id:
+        raise RuntimeError("Missing recording id for download job")
+
+    final_path = ingest_file(downloaded_path, recording_id)
+    inferred_name = final_path.name
+    if detected_title:
+        inferred_name = f"{detected_title}{final_path.suffix}"
+
+    job["file_path"] = str(final_path)
+    job["original_filename"] = inferred_name
+
+    try:
+        with new_session() as session:
+            rec = session.get(Recording, recording_id)
+            if rec:
+                rec.file_path = str(final_path)
+                rec.filename = inferred_name
+                rec.status = "queued"
+                rec.created_at = rec.created_at or time.time()
+                session.add(rec)
+                session.commit()
+    except Exception:
+        _append_job_log(job_id, "WARN", "Downloaded file saved but database metadata update failed")
+
+    _append_job_log(job_id, "INFO", f"Download completed: {inferred_name}")
+
+
 def _process_job(job_id: str) -> None:
     """Process one queued job by delegating to type-specific handlers."""
     job = state.jobs[job_id]
@@ -315,6 +381,9 @@ def _process_job(job_id: str) -> None:
             from core.analysis import _process_analysis_job
             _process_analysis_job(job_id)
             return
+
+        if job_type == "download_transcribe":
+            _run_download_phase(job_id)
 
         if job["options"].get("colab_url"):
             _handle_colab_job(job_id)
