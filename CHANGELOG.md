@@ -6,10 +6,20 @@ Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-04-19
+
+### ✨ Improvements
+- **README:** Added badges (stars, release, license, Python version), competitor comparison table, Telegram community link, and roadmap section.
+- **Community:** Added `CONTRIBUTING.md` with contribution guide and AI-code disclosure note.
+- **Community:** Added GitHub issue templates for Bug Report, Feature Request, and Documentation.
+- **Roadmap:** Simplified `docs/ROADMAP.md` — stripped implementation details, now points to the [GitHub Project board](https://github.com/users/sim186/projects/1) as source of truth.
+- **UI:** Added Feedback link in sidebar footer — opens GitHub issue template chooser directly.
+
+## [1.8.0] - 2026-04-18
+
 ### ✨ Improvements
 - URL source support in the downloader flow to include YouTube, TikTok, Instagram, Facebook, X, Vimeo, and Twitch (through `yt-dlp` resolution).
 - Automatic platform tagging: recordings imported from URLs now receive a source tag (for example `youtube`, `tiktok`, `instagram`) for easier filtering in the library.
-
 
 ## [1.7.0] - 2026-04-15
 ### ✨ Improvements
