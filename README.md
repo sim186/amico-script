@@ -6,6 +6,17 @@
 
 <p align="center"><strong>AmicoScript local audio transcription tool.</strong></p>
 
+<p align="center">
+  <img src="https://img.shields.io/github/stars/sim186/AmicoScript?style=flat-square" alt="Stars" />
+  <img src="https://img.shields.io/github/v/release/sim186/AmicoScript?style=flat-square" alt="Latest Release" />
+  <img src="https://img.shields.io/github/license/sim186/AmicoScript?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square" alt="Python 3.10+" />
+</p>
+
+<p align="center">
+  ⭐ <strong><a href="https://github.com/sim186/AmicoScript">Star if useful</a></strong> · 💬 <strong><a href="https://t.me/amicoscript">Telegram @amicoscript</a></strong> · 🐛 <strong><a href="https://github.com/sim186/AmicoScript/issues">Issues welcome</a></strong>
+</p>
+
 **AmicoScript** is a privacy-focused, local-first transcription tool built on OpenAI's Whisper models. It allows you to transform audio recordings into structured, searchable transcripts without your data ever leaving your repository or machine. Whether you need speaker identification (diarization), translation, or simple subtitles, AmicoScript provides a fast, free, and secure alternative to cloud services.
 
 ![AmicoScript Demo](images/amicoscript-demo.gif)
@@ -23,6 +34,23 @@ Most transcription tools:
 AmicoScript keeps everything local.
 
 → Your audio never leaves your machine.
+
+---
+
+## 📊 How it compares
+
+| Feature | AmicoScript | Buzz | WhisperX | Whisper WebUI | Insanely Fast Whisper |
+|---------|:-----------:|:----:|:--------:|:-------------:|:--------------------:|
+| Local-only (no cloud) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Speaker diarization | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Ollama / LLM integration** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| URL import (7 platforms) | ✅ | YouTube only | ❌ | YouTube only | ❌ |
+| Batch processing | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Desktop app (no Python needed) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Docker support | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Web UI | ✅ | ❌ | ❌ | ✅ | ❌ |
+
+*Comparison based on official READMEs as of April 2026. See something wrong? [Open a PR](https://github.com/sim186/AmicoScript/pulls).*
 
 ---
 
@@ -188,15 +216,29 @@ Full documentation (API, setup, details):
 
 ---
 
-## 🤝 Contributing
+## 🗺️ Roadmap
 
-Feedback, issues, and contributions are welcome.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for full priority breakdown.
+
+**Currently planned:**
+- Live voice recording
+- Manual speaker identification (rename speakers)
+- AI-powered smart tagging
+- Official website & docs
 
 ---
 
-## ⭐ If you find this useful
+## 🤝 Contributing
 
-Give it a star — it helps a lot!
+Feedback, issues, and contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+
+---
+
+## ⭐ Star & Share
+
+If AmicoScript saves you time, a star helps others discover it.
+
+💬 Join the community on **[Telegram @amicoscript](https://t.me/amicoscript)** — share feedback, request features, show what you built.
 
 ---
 
