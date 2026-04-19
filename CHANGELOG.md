@@ -10,9 +10,6 @@ Keep a Changelog format.
 - **Microphone recording:** Added "Record mic" button to the upload area. Opens a dialog to record directly from your microphone, with pause/resume support and a live timer. On stop, the recording is queued into the normal batch transcription flow — no backend changes required.
 
 ## [1.9.0] - 2026-04-19
-- No change details provided.
-
-## [1.9.0] - 2026-04-19
 
 ### ✨ Improvements
 - **README:** Added badges (stars, release, license, Python version), competitor comparison table, Telegram community link, and roadmap section.
