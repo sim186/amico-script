@@ -6,7 +6,50 @@ Keep a Changelog format.
 
 ## [Unreleased]
 
+### 🔒 Security
 
+- **CORS restricted to localhost:** `allow_origins` changed from `["*"]` to explicit localhost origins, preventing cross-origin requests from arbitrary websites.
+- **Exit endpoint CSRF token:** `/api/exit` now requires a per-session token generated at startup (`secrets.token_hex(32)`), blocking DNS-rebinding attacks that could terminate the app remotely.
+- **Audio path bounds check:** `/api/audio/{job_id}` validates the served file is inside `STORAGE_ROOT` before responding, preventing potential path traversal.
+- **Zip-slip guard:** ffmpeg extraction now verifies the extracted binary resolves inside the target directory after extraction.
+- **Frontend XSS fix:** `showFolderMenu` and `showTagMenu` rebuilt using DOM API (`createElement` + `addEventListener`) instead of `innerHTML` with embedded JSON, eliminating injection via folder/tag names containing `'` or `</script>`.
+- **HF token removed from localStorage:** Hugging Face token no longer written to `localStorage` (readable by browser extensions); loaded from server only.
+
+### 🐛 Fixes
+
+- **Chunked file upload:** `/api/transcribe` now streams uploads in 1 MB chunks instead of buffering the entire file in RAM — prevents OOM crashes on large audio files.
+- **Session lifecycle:** `get_session` and `new_session` now commit on success and rollback on exception; routes that omit an explicit `commit()` no longer silently drop writes.
+- **Atomic settings write:** `_save_settings` writes to a `.tmp` file then renames atomically via `os.replace`, preventing corrupt/truncated settings on crash.
+- **Settings portable mode:** `settings.py` now derives its storage path from `AMICOSCRIPT_PORTABLE` env var, matching `config.py` behavior — settings no longer leak to `~/.amicoscript` in portable mode.
+- **Config mkdir deferred:** `STORAGE_ROOT` and `RECORDINGS_DIR` directories are no longer created at import time; creation moved to `ensure_storage_dirs()` called during startup.
+- **ffmpeg raises on failure:** `get_ffmpeg_path` now raises `RuntimeError` instead of returning `None` when the binary cannot be found or downloaded, preventing `TypeError` crashes in callers.
+- **asyncio.Queue deferred init:** `JOB_QUEUE` created in `_init_queue()` called at startup rather than at module import, fixing silent breakage on Python 3.9.
+- **Whisper model cache thread-safety:** `_get_whisper_model` is now wrapped in `state._model_lock` to prevent concurrent access from the worker and translation threads.
+- **Translation chunk no collision:** `_translate_audio_chunk` uses `tempfile.mkstemp()` instead of a timestamp-based filename — concurrent translations can no longer overwrite each other's temp files.
+- **Delete order fixed:** `delete_recording` now deletes DB rows and commits before unlinking the audio file — a crash between the two no longer leaves orphaned DB records pointing to missing files.
+- **Delete blocked during active job:** `DELETE /api/recordings/{id}` returns 409 if the recording is currently being transcribed or translated.
+- **Cleanup loop skips running jobs:** The hourly cleanup loop no longer deletes temp files for jobs still in active states (`queued`, `transcribing`, `diarizing`, etc.).
+- **Speaker rename persisted:** `/api/jobs/{id}/rename-speaker` now calls `_sync_job_to_db` after updating in-memory state — renames survive server restarts.
+- **Export job guards None result:** `export_job` returns 404 instead of crashing if job is marked done but `result` was never set.
+- **LIKE wildcard escaping:** Search query is now escaped (`%` → `\%`, `_` → `\_`) with `ESCAPE '\\'` before embedding in SQL LIKE patterns — search for filenames containing `_` or `%` now works correctly.
+- **Library limit clamped:** `GET /api/library?limit=-1` no longer bypasses the row cap; limit is clamped with `max(1, min(limit, 200))`.
+- **Export json_data validated:** `export_recording` wraps `json.loads(tr.json_data)` in a try/except and returns a 500 with a clear message instead of a raw `KeyError` traceback.
+- **Folder delete cleans Analysis rows:** `delete_folder` with `delete_recordings=True` now also deletes associated `Analysis` rows, preventing orphaned records.
+- **Negative int params rejected:** `num_speakers`, `beam_size`, `best_of`, and related int fields now use `try: int(v)` with a positivity check instead of `.isdigit()`, which silently ignored negative values.
+- **Normalized audio written to tempdir:** `_normalize_audio` now creates the intermediate WAV via `tempfile.mkstemp()` instead of writing beside the source file, fixing failures on read-only mounts.
+- **Export formatters safe on missing segments:** All export formatters (`_format_srt`, `_format_txt`, `_format_md`) use `.get("segments", [])` and no longer crash on missing or empty segments.
+
+### 🧪 Tests
+
+- Added `test_exports.py`: format functions with empty/missing segments, speaker prefix, JSON roundtrip.
+- Added `test_settings.py`: atomic write, corruption guard, portable mode path, standard mode path.
+- Added `test_search_escaping.py`: LIKE wildcard escaping logic, negative/overlarge limit clamping.
+- Added `test_job_logs_deque.py`: log cap at 1000, deque type, insertion order.
+- Added `test_config_lazy_mkdir.py`: no mkdir on import, `ensure_storage_dirs()` creates dirs.
+- Added `test_ffmpeg_helper.py`: zip-slip detection, raises on unsupported OS, returns existing binary.
+- Added `test_translation_chunk.py`: `mkstemp` used, temp file cleaned up on error.
+- Added `test_db_session.py`: session commits on success, rolls back on exception.
+- Added `test_transcription_options.py`: valid ints, negative → default, non-numeric → default, zero → default.
 
 ## [1.10.0] - 2026-04-19
 ### ✨ Improvements
