@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -26,7 +27,8 @@ def _translate_audio_chunk(
     if not ffmpeg_bin:
         raise RuntimeError("ffmpeg not found; cannot perform audio translation")
 
-    chunk_path = str(Path(audio_path).with_name(f"chunk_{int(time.time())}_{round(start, 2)}.wav"))
+    fd, chunk_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
     duration = end - start
     cmd = [
         ffmpeg_bin,
@@ -57,8 +59,10 @@ def _translate_audio_chunk(
     except (subprocess.SubprocessError, OSError, RuntimeError, ValueError) as exc:
         return f"Translation error: {exc}"
     finally:
-        if os.path.exists(chunk_path):
-            os.remove(chunk_path)
+        try:
+            os.unlink(chunk_path)
+        except OSError:
+            pass
 
 
 def _process_translation_job(job_id: str) -> None:

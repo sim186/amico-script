@@ -80,21 +80,28 @@ def _build_transcription_options(
     best_of: str,
     force_normalize_audio: str,
 ) -> dict[str, Any]:
+    def _parse_positive_int(value: str, default: int | None) -> int | None:
+        try:
+            v = int(value)
+            return v if v > 0 else default
+        except (ValueError, TypeError):
+            return default
+
     return TranscriptionConfig(
         model=model,
         language=language,
         diarize=_to_bool(diarize),
         colab_url=colab_url,
-        num_speakers=int(num_speakers) if num_speakers.isdigit() else None,
-        min_speakers=int(min_speakers) if min_speakers.isdigit() else None,
-        max_speakers=int(max_speakers) if max_speakers.isdigit() else None,
+        num_speakers=_parse_positive_int(num_speakers, None),
+        min_speakers=_parse_positive_int(min_speakers, None),
+        max_speakers=_parse_positive_int(max_speakers, None),
         compute_type=(compute_type or "int8"),
         device=(device or "auto"),
-        device_index=int(device_index) if str(device_index).isdigit() else 0,
+        device_index=_parse_positive_int(device_index, 0) or 0,
         vad_filter=_to_bool(vad_filter, default=True),
         word_timestamps=_to_bool(word_timestamps),
-        beam_size=int(beam_size) if str(beam_size).isdigit() else 5,
-        best_of=int(best_of) if str(best_of).isdigit() else 5,
+        beam_size=_parse_positive_int(beam_size, 5) or 5,
+        best_of=_parse_positive_int(best_of, 5) or 5,
         force_normalize_audio=_to_bool(force_normalize_audio),
     ).model_dump()
 
@@ -217,7 +224,8 @@ async def transcribe(
     staging = _upload_dir() / f"{job_id}{ext}"
 
     async with aiofiles.open(staging, "wb") as f:
-        await f.write(await file.read())
+        while chunk := await file.read(1024 * 1024):
+            await f.write(chunk)
 
     recording_id = str(uuid.uuid4())
     permanent_path = ingest_file(staging, recording_id)
@@ -387,10 +395,16 @@ def cancel_job(job_id: str) -> dict:
 
 @router.get("/api/audio/{job_id}")
 def get_audio(job_id: str):
+    from config import STORAGE_ROOT
     job = _get_job(job_id)
     fp = job.get("file_path", "")
     if not fp or not os.path.exists(fp):
         raise HTTPException(404, "Audio file not found (may have expired)")
+    try:
+        if not Path(fp).resolve().is_relative_to(STORAGE_ROOT.resolve()):
+            raise HTTPException(403, "Access denied")
+    except ValueError:
+        raise HTTPException(403, "Access denied")
     ext = Path(fp).suffix.lower()
     media_types = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".flac": "audio/flac"}
     return FileResponse(fp, media_type=media_types.get(ext, "audio/mpeg"))
@@ -419,6 +433,7 @@ def get_job_logs(job_id: str, limit: int = 300) -> dict:
 
 @router.post("/api/jobs/{job_id}/rename-speaker")
 async def rename_speaker(job_id: str, old_name: str = Form(...), new_name: str = Form(...)) -> dict:
+    from core.job_helpers import _sync_job_to_db
     job = _get_job(job_id)
     if job["status"] != "done":
         raise HTTPException(409, "Job not complete")
@@ -426,15 +441,16 @@ async def rename_speaker(job_id: str, old_name: str = Form(...), new_name: str =
     if not result:
         raise HTTPException(404, "Result not found")
 
-    if old_name in result["speakers"]:
+    if old_name in result.get("speakers", []):
         idx = result["speakers"].index(old_name)
         result["speakers"][idx] = new_name
         result["speakers"] = sorted(list(set(result["speakers"])))
 
-    for seg in result["segments"]:
-        if seg["speaker"] == old_name:
+    for seg in result.get("segments", []):
+        if seg.get("speaker") == old_name:
             seg["speaker"] = new_name
 
+    _sync_job_to_db(job_id)
     return {"ok": True, "new_name": new_name}
 
 
@@ -444,6 +460,8 @@ def export_job(job_id: str, fmt: str):
     if job["status"] != "done":
         raise HTTPException(409, "Job not complete")
     result = job["result"]
+    if not result:
+        raise HTTPException(404, "Result not available")
     filename = Path(job["original_filename"]).stem
 
     formatters = {

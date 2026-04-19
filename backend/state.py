@@ -5,6 +5,7 @@ and main.py while keeping the worker thread and the FastAPI event loop
 decoupled.
 """
 import asyncio
+import threading
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -15,19 +16,27 @@ from typing import Optional
 jobs: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
-# Whisper model cache
+# Whisper model cache + lock (guards concurrent access from worker + translate)
 # ---------------------------------------------------------------------------
 
 _cached_model = None
 _cached_model_name: Optional[str] = None
 _cached_model_device: Optional[str] = None
 _cached_model_key: Optional[tuple] = None
+_model_lock: threading.Lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Background job queue
+# Background job queue — initialised in main.py startup (not at import time)
+# so the correct asyncio event loop is always used.
 # ---------------------------------------------------------------------------
 
-JOB_QUEUE: asyncio.Queue[str] = asyncio.Queue()
+JOB_QUEUE: asyncio.Queue  # assigned by _init_queue() at startup
+
+
+def _init_queue() -> None:
+    global JOB_QUEUE
+    JOB_QUEUE = asyncio.Queue()
+
 
 # ---------------------------------------------------------------------------
 # asyncio event loop — set by main.py at startup
@@ -35,3 +44,9 @@ JOB_QUEUE: asyncio.Queue[str] = asyncio.Queue()
 
 # Kept for compatibility while older code paths are migrated.
 event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+# ---------------------------------------------------------------------------
+# Exit CSRF token — generated at startup, required by /api/exit
+# ---------------------------------------------------------------------------
+
+exit_token: str = ""

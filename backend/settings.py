@@ -1,30 +1,50 @@
 """Persistent settings for AmicoScript (HF token, etc.).
 
-Settings are stored in ~/.amicoscript/settings.json so they survive app
-reinstalls and Docker volume mounts.
+Settings are stored alongside the data directory so they respect PORTABLE_MODE.
 """
 import json
 import os
+import tempfile
 from pathlib import Path
 
-SETTINGS_DIR = Path.home() / ".amicoscript"
-SETTINGS_FILE = SETTINGS_DIR / "settings.json"
+
+def _settings_file() -> Path:
+    """Return the settings file path, respecting PORTABLE_MODE."""
+    portable = os.environ.get("AMICOSCRIPT_PORTABLE", "").lower() in ("1", "true", "yes")
+    if portable:
+        base = Path.cwd() / "amicoscript-data"
+    else:
+        base = Path.home() / ".amicoscript"
+    return base / "settings.json"
 
 
 def _load_settings() -> dict:
     """Load settings from disk, returning an empty dict on any error."""
     try:
-        if SETTINGS_FILE.exists():
-            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        sf = _settings_file()
+        if sf.exists():
+            return json.loads(sf.read_text(encoding="utf-8"))
     except Exception:
         pass
     return {}
 
 
 def _save_settings(settings: dict) -> None:
-    """Persist settings dict to disk."""
-    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    """Persist settings dict to disk atomically (write-then-rename)."""
+    sf = _settings_file()
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(settings, indent=2)
+    fd, tmp_path = tempfile.mkstemp(dir=sf.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, sf)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def _get_saved_hf_token() -> str:

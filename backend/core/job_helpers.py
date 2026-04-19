@@ -24,10 +24,10 @@ def _append_job_log(job_id: str, level: str, message: str) -> None:
     if not job:
         return
 
-    logs = job.setdefault("logs", [])
-    logs.append({"ts": round(time.time(), 3), "level": level, "message": message})
-    if len(logs) > 1000:
-        del logs[:-1000]
+    from collections import deque
+    if "logs" not in job or not isinstance(job["logs"], deque):
+        job["logs"] = deque(job.get("logs", []), maxlen=1000)
+    job["logs"].append({"ts": round(time.time(), 3), "level": level, "message": message})
 
     log_level = getattr(logging, level.upper(), None)
     if isinstance(log_level, int):

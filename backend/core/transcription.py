@@ -69,44 +69,45 @@ def _get_whisper_model(
         import resource_downloader
 
     cache_key = (model_name, compute_type, device, device_index)
-    if state._cached_model is not None and getattr(state, "_cached_model_key", None) == cache_key:
-        return state._cached_model, state._cached_model_device
+    with state._model_lock:
+        if state._cached_model is not None and getattr(state, "_cached_model_key", None) == cache_key:
+            return state._cached_model, state._cached_model_device
 
-    if state._cached_model is not None:
-        del state._cached_model
-        state._cached_model = None
-        gc.collect()
+        if state._cached_model is not None:
+            del state._cached_model
+            state._cached_model = None
+            gc.collect()
+            try:
+                import torch
+                if hasattr(torch, "cuda") and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+
+        requested_device = device
         try:
-            import torch
-            if hasattr(torch, "cuda") and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
+            try:
+                resource_downloader.ensure_whisper_model(model_name)
+            except Exception:
+                pass
+            model = WhisperModel(
+                model_name,
+                device=requested_device,
+                compute_type=compute_type,
+                device_index=device_index,
+            )
+            active_device = requested_device
+        except Exception as exc:
+            if not _is_missing_cuda_runtime_error(exc):
+                raise
+            model = WhisperModel(model_name, device="cpu", compute_type=compute_type)
+            active_device = "cpu"
 
-    requested_device = device
-    try:
-        try:
-            resource_downloader.ensure_whisper_model(model_name)
-        except Exception:
-            pass
-        model = WhisperModel(
-            model_name,
-            device=requested_device,
-            compute_type=compute_type,
-            device_index=device_index,
-        )
-        active_device = requested_device
-    except Exception as exc:
-        if not _is_missing_cuda_runtime_error(exc):
-            raise
-        model = WhisperModel(model_name, device="cpu", compute_type=compute_type)
-        active_device = "cpu"
-
-    state._cached_model = model
-    state._cached_model_name = model_name
-    state._cached_model_device = active_device
-    state._cached_model_key = cache_key
-    return model, active_device
+        state._cached_model = model
+        state._cached_model_name = model_name
+        state._cached_model_device = active_device
+        state._cached_model_key = cache_key
+        return model, active_device
 
 
 def _run_transcription_phase(job_id: str) -> tuple[list[dict], dict]:

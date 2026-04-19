@@ -1,6 +1,8 @@
 """Audio conversion helpers for transcription and diarization."""
+import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import state
@@ -32,7 +34,8 @@ def _normalize_audio(
         return input_path
 
     suffix = "norm" if purpose == "transcription" else "diar"
-    normalized_path = str(Path(input_path).with_name(f"{Path(input_path).stem}_{suffix}.wav"))
+    fd, normalized_path = tempfile.mkstemp(suffix=f"_{suffix}.wav")
+    os.close(fd)
     cmd = [
         ffmpeg_bin,
         "-y",

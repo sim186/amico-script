@@ -65,7 +65,8 @@ def get_library(
         stmt = stmt.where(Recording.id.in_(linked_ids))
 
     sort_col = {"filename": Recording.filename, "duration": Recording.duration}.get(sort, Recording.created_at)
-    stmt = stmt.order_by(sort_col.asc() if order == "asc" else sort_col.desc()).offset(offset).limit(min(limit, 200))
+    safe_limit = max(1, min(limit, 200))
+    stmt = stmt.order_by(sort_col.asc() if order == "asc" else sort_col.desc()).offset(offset).limit(safe_limit)
 
     recordings = session.exec(stmt).all()
     return [_recording_with_tags(r, session) for r in recordings]
@@ -101,18 +102,19 @@ async def update_recording(
 
 @router.delete("/api/recordings/{recording_id}")
 def delete_recording(recording_id: str, session: Session = Depends(get_session)) -> dict:
+    import state as _state
     rec = session.get(Recording, recording_id)
     if not rec:
         raise HTTPException(404, "Recording not found")
 
-    try:
-        fp = Path(rec.file_path)
-        if fp.exists():
-            fp.unlink()
-        if fp.parent.exists() and not any(fp.parent.iterdir()):
-            fp.parent.rmdir()
-    except OSError:
-        pass
+    # Refuse if an active job is processing this recording
+    for job in _state.jobs.values():
+        if job.get("recording_id") == recording_id and job.get("status") in (
+            "queued", "transcribing", "diarizing", "loading_model", "translating"
+        ):
+            raise HTTPException(409, "Recording is currently being processed; cancel the job first")
+
+    file_path_to_delete = rec.file_path
 
     for link in session.exec(select(RecordingTag).where(RecordingTag.recording_id == recording_id)).all():
         session.delete(link)
@@ -123,6 +125,17 @@ def delete_recording(recording_id: str, session: Session = Depends(get_session))
 
     session.delete(rec)
     session.commit()
+
+    # Delete the file after successful DB commit
+    try:
+        fp = Path(file_path_to_delete)
+        if fp.exists():
+            fp.unlink()
+        if fp.parent.exists() and not any(fp.parent.iterdir()):
+            fp.parent.rmdir()
+    except OSError:
+        pass
+
     return {"ok": True}
 
 
@@ -164,7 +177,13 @@ def export_recording(recording_id: str, fmt: str, session: Session = Depends(get
     if not tr:
         raise HTTPException(404, "Transcript not found")
 
-    result = json.loads(tr.json_data)
+    try:
+        result = json.loads(tr.json_data)
+        if not isinstance(result, dict):
+            raise ValueError("json_data is not an object")
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(500, f"Transcript data is corrupt: {exc}") from exc
+
     filename = Path(rec.filename).stem
 
     formatters = {

@@ -19,9 +19,12 @@ if PORTABLE_MODE:
 else:
     STORAGE_ROOT = Path.home() / ".amicoscript" / "data"
 
-STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-
 DB_PATH = STORAGE_ROOT / "amicoscript.db"
 
 RECORDINGS_DIR = STORAGE_ROOT / "recordings"
-RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_storage_dirs() -> None:
+    """Create storage directories. Called at app startup, not at import time."""
+    STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)

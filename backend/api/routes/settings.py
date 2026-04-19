@@ -9,8 +9,12 @@ router = APIRouter()
 
 @router.get("/api/settings")
 def get_settings() -> dict:
+    import state
     settings = _load_settings()
-    return {"hf_token": settings.get("hf_token", "")}
+    return {
+        "hf_token": settings.get("hf_token", ""),
+        "exit_token": getattr(state, "exit_token", ""),
+    }
 
 
 @router.post("/api/settings")

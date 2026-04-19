@@ -74,7 +74,12 @@ app = FastAPI(title="AmicoScript")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8002",
+        "http://127.0.0.1:8002",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,6 +95,11 @@ app.include_router(folders_tags_router)
 
 @app.on_event("startup")
 async def _startup() -> None:
+    import secrets
+    from config import ensure_storage_dirs
+    ensure_storage_dirs()
+    state._init_queue()
+    state.exit_token = secrets.token_hex(32)
     state.event_loop = asyncio.get_running_loop()
     init_db()
     _recover_interrupted_jobs()
@@ -159,6 +169,9 @@ async def _release_poller_loop() -> None:
         await asyncio.sleep(60 * 60 * 4)
 
 
+_ACTIVE_STATUSES = {"queued", "transcribing", "diarizing", "loading_model", "translating"}
+
+
 async def _cleanup_loop() -> None:
     from config import STORAGE_ROOT
 
@@ -167,6 +180,8 @@ async def _cleanup_loop() -> None:
         cutoff = time.time() - 3600
         for job_id in list(state.jobs.keys()):
             job = state.jobs[job_id]
+            if job.get("status") in _ACTIVE_STATUSES:
+                continue
             if job.get("created_at", 0) < cutoff:
                 fp = job.get("file_path", "")
                 if fp and os.path.exists(fp):

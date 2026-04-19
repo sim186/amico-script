@@ -7,7 +7,7 @@ from pathlib import Path
 
 from db import get_session
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from models import Folder, Recording, RecordingTag, Tag, Transcript
+from models import Analysis, Folder, Recording, RecordingTag, Tag, Transcript
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -131,6 +131,8 @@ def delete_folder(folder_id: str, delete_recordings: bool = False, session: Sess
                     session.delete(link)
                 for tr in session.exec(select(Transcript).where(Transcript.recording_id == rec.id)).all():
                     session.delete(tr)
+                for an in session.exec(select(Analysis).where(Analysis.recording_id == rec.id)).all():
+                    session.delete(an)
                 session.delete(rec)
         else:
             for rec in recordings_in_folder:
@@ -246,6 +248,9 @@ def search_library(q: str = "", limit: int = 20, offset: int = 0, session: Sessi
 
     safe_limit = min(limit, 100)
 
+    # Escape LIKE wildcards so % and _ in the query are treated literally
+    q_like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
     try:
         fts_rows = session.exec(
             _text(
@@ -267,22 +272,22 @@ def search_library(q: str = "", limit: int = 20, offset: int = 0, session: Sessi
                 """
                 SELECT DISTINCT r.id as recording_id,
                        CASE
-                         WHEN f.name LIKE :ql THEN 'Folder: ' || f.name
-                         WHEN t.name LIKE :ql THEN 'Tag: ' || t.name
+                         WHEN f.name LIKE :ql ESCAPE '\\' THEN 'Folder: ' || f.name
+                         WHEN t.name LIKE :ql ESCAPE '\\' THEN 'Tag: ' || t.name
                          ELSE 'Title: ' || r.filename
                        END as snippet
                 FROM recording r
                 LEFT JOIN folder f ON r.folder_id = f.id
                 LEFT JOIN recordingtag rt ON r.id = rt.recording_id
                 LEFT JOIN tag t ON rt.tag_id = t.id
-                WHERE r.filename LIKE :ql
-                   OR f.name LIKE :ql
-                   OR t.name LIKE :ql
+                WHERE r.filename LIKE :ql ESCAPE '\\'
+                   OR f.name LIKE :ql ESCAPE '\\'
+                   OR t.name LIKE :ql ESCAPE '\\'
                 ORDER BY r.filename
                 LIMIT :lim OFFSET :off
                 """
             ),
-            params={"ql": f"%{q}%", "lim": safe_limit, "off": offset},
+            params={"ql": q_like, "lim": safe_limit, "off": offset},
         ).all()
 
         fts_ids = {r.recording_id: r.snippet for r in fts_rows}
@@ -297,9 +302,9 @@ def search_library(q: str = "", limit: int = 20, offset: int = 0, session: Sessi
                 """
                 SELECT DISTINCT r.id AS recording_id,
                        CASE
-                         WHEN f.name LIKE :ql THEN 'Folder: ' || f.name
-                         WHEN t.name LIKE :ql THEN 'Tag: ' || t.name
-                         WHEN r.filename LIKE :ql THEN 'Title: ' || r.filename
+                         WHEN f.name LIKE :ql ESCAPE '\\' THEN 'Folder: ' || f.name
+                         WHEN t.name LIKE :ql ESCAPE '\\' THEN 'Tag: ' || t.name
+                         WHEN r.filename LIKE :ql ESCAPE '\\' THEN 'Title: ' || r.filename
                          ELSE COALESCE(substr(tr.full_text, 1, 100), 'Metadata match')
                        END AS snippet
                 FROM recording r
@@ -307,15 +312,15 @@ def search_library(q: str = "", limit: int = 20, offset: int = 0, session: Sessi
                 LEFT JOIN folder f ON r.folder_id = f.id
                 LEFT JOIN recordingtag rt ON r.id = rt.recording_id
                 LEFT JOIN tag t ON rt.tag_id = t.id
-                WHERE r.filename LIKE :ql
-                   OR tr.full_text LIKE :ql
-                   OR f.name LIKE :ql
-                   OR t.name LIKE :ql
+                WHERE r.filename LIKE :ql ESCAPE '\\'
+                   OR tr.full_text LIKE :ql ESCAPE '\\'
+                   OR f.name LIKE :ql ESCAPE '\\'
+                   OR t.name LIKE :ql ESCAPE '\\'
                 ORDER BY r.filename
                 LIMIT :lim OFFSET :off
                 """
             ),
-            params={"ql": f"%{q}%", "lim": safe_limit, "off": offset},
+            params={"ql": q_like, "lim": safe_limit, "off": offset},
         ).all()
 
     results = []
@@ -334,13 +339,18 @@ def search_library(q: str = "", limit: int = 20, offset: int = 0, session: Sessi
 
 
 @router.post("/api/exit")
-async def api_exit(request: Request):
+async def api_exit(request: Request, token: str = ""):
+    import state as _state
     try:
         client_host = request.client.host if request.client else ""
     except Exception:
         client_host = ""
 
     if client_host not in ("127.0.0.1", "::1", "localhost"):
+        return {"status": "ignored"}
+
+    # Require the per-session CSRF token generated at startup
+    if not _state.exit_token or token != _state.exit_token:
         return {"status": "ignored"}
 
     def _delayed_exit() -> None:

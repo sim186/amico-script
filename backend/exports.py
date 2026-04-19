@@ -40,7 +40,7 @@ def _format_json(result: dict) -> str:
 
 def _format_srt(result: dict) -> str:
     lines = []
-    for i, seg in enumerate(result["segments"], 1):
+    for i, seg in enumerate(result.get("segments", []), 1):
         speaker_prefix = f"[{seg['speaker']}] " if seg.get("speaker") else ""
         lines.append(str(i))
         lines.append(f"{_ms(seg['start'])} --> {_ms(seg['end'])}")
@@ -52,7 +52,7 @@ def _format_srt(result: dict) -> str:
 def _format_txt(result: dict) -> str:
     lines = []
     prev_speaker = None
-    for seg in result["segments"]:
+    for seg in result.get("segments", []):
         speaker = seg.get("speaker", "")
         if speaker and speaker != prev_speaker:
             if lines:
@@ -77,7 +77,7 @@ def _format_md(result: dict) -> str:
         "",
     ]
     prev_speaker = None
-    for seg in result["segments"]:
+    for seg in result.get("segments", []):
         speaker = seg.get("speaker", "")
         if speaker and speaker != prev_speaker:
             lines.append(f"**{speaker}**")

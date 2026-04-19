@@ -2393,7 +2393,6 @@
       if (hfInput) {
         hfInput.addEventListener('input', e => {
           state.hfToken = e.target.value;
-          localStorage.setItem('hfToken', e.target.value);
           _saveHfTokenDebounced(e.target.value);
         });
       }
@@ -3697,16 +3696,16 @@
         if (cInp) cInp.value = savedColabUrl;
       }
 
-      // Load HF token: try server first, then localStorage fallback
+      // Load HF token and exit token from server only (not stored in localStorage)
       let tok = '';
       try {
         const res = await fetch('/api/settings');
         if (res.ok) {
           const data = await res.json();
           tok = data.hf_token || '';
+          if (data.exit_token) state.exitToken = data.exit_token;
         }
-      } catch (_) { /* server not available, use localStorage */ }
-      if (!tok) tok = localStorage.getItem('hfToken') || '';
+      } catch (_) { /* server not available */ }
       if (tok) { state.hfToken = tok; document.getElementById('hf-token-input').value = tok; }
 
       // Load LLM settings from server
@@ -3830,17 +3829,25 @@
     }
 
     function showFolderMenu(e, folder) {
-      // Remove any existing menu
       document.getElementById('folder-ctx-menu')?.remove();
       const menu = document.createElement('div');
       menu.id = 'folder-ctx-menu';
       menu.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm';
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
-      menu.innerHTML = `
-    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('folder-ctx-menu')?.remove(); window.showEntityDialog('folder', ${JSON.stringify(folder).replace(/"/g, '&quot;')}); })()">Rename / Color</button>
-    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="(function(){ deleteFolderConfirm('${folder.id}'); document.getElementById('folder-ctx-menu')?.remove(); })()">Delete</button>
-  `;
+
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'block w-full text-left px-4 py-1.5 hover:bg-slate-50';
+      renameBtn.textContent = 'Rename / Color';
+      renameBtn.addEventListener('click', () => { menu.remove(); window.showEntityDialog('folder', folder); });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => { deleteFolderConfirm(folder.id); menu.remove(); });
+
+      menu.appendChild(renameBtn);
+      menu.appendChild(deleteBtn);
       document.body.appendChild(menu);
       setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
     }
@@ -3981,10 +3988,19 @@
       menu.className = 'absolute z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm';
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
-      menu.innerHTML = `
-    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); window.showEntityDialog('tag', ${JSON.stringify(tag).replace(/"/g, '&quot;')}); })()">Rename / Color</button>
-    <button class="block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500" onclick="(function(){ document.getElementById('tag-ctx-menu')?.remove(); deleteTagConfirm(${JSON.stringify(tag).replace(/"/g, '&quot;')}); })()">Delete</button>
-  `;
+
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'block w-full text-left px-4 py-1.5 hover:bg-slate-50';
+      renameBtn.textContent = 'Rename / Color';
+      renameBtn.addEventListener('click', () => { menu.remove(); window.showEntityDialog('tag', tag); });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'block w-full text-left px-4 py-1.5 hover:bg-slate-50 text-red-500';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => { menu.remove(); deleteTagConfirm(tag); });
+
+      menu.appendChild(renameBtn);
+      menu.appendChild(deleteBtn);
       document.body.appendChild(menu);
       setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
     }
@@ -5667,9 +5683,8 @@
     // packaged application can exit.
     window.addEventListener('beforeunload', () => {
       try {
-        // navigator.sendBeacon performs a lightweight POST that doesn't block
-        // the unload sequence.
-        navigator.sendBeacon('/api/exit');
+        const token = state.exitToken || '';
+        navigator.sendBeacon(`/api/exit?token=${encodeURIComponent(token)}`);
       } catch (e) {
         // best-effort only
       }

@@ -86,13 +86,23 @@ def init_db() -> None:
 
 
 def get_session():
-    """FastAPI dependency — yields a session and commits/rolls back on exit."""
+    """FastAPI dependency — yields a session and commits on success, rolls back on error."""
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
 
 @contextmanager
 def new_session():
     """Context manager for use in background threads (not FastAPI requests)."""
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
