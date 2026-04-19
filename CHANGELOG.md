@@ -6,11 +6,6 @@ Keep a Changelog format.
 
 ## [Unreleased]
 
-
-
-## [1.9.0] - 2026-04-19
-- No change details provided.
-
 ## [1.9.0] - 2026-04-19
 
 ### ✨ Improvements
