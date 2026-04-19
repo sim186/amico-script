@@ -1168,6 +1168,14 @@
                 <button id="paste-link-btn" class="text-slate-500 hover:text-brand transition" type="button">
                   Paste link
                 </button>
+                <span class="text-slate-300">·</span>
+                <button id="record-mic-btn" class="text-slate-500 hover:text-brand transition flex items-center gap-1" type="button">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 1a4 4 0 014 4v7a4 4 0 01-8 0V5a4 4 0 014-4z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 10a7 7 0 01-14 0M12 19v4M8 23h8"/>
+                  </svg>
+                  Record mic
+                </button>
               </div>
 
               <!-- Subtle integrations -->
@@ -4803,6 +4811,169 @@
         if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'entity-edit-name') { e.preventDefault(); window.saveEntityDialog(); }
       });
 
+      // Mic recording modal
+      (function () {
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let timerInterval = null;
+        let startTime = 0;
+        let pausedElapsed = 0;
+        let pausedAt = null;
+
+        function micModalState(state) {
+          document.getElementById('mic-state-idle').classList.toggle('hidden', state !== 'idle');
+          document.getElementById('mic-state-recording').classList.toggle('hidden', state !== 'recording');
+          document.getElementById('mic-state-review').classList.toggle('hidden', state !== 'review');
+        }
+
+        function formatDuration(ms) {
+          const total = Math.floor(ms / 1000);
+          const m = Math.floor(total / 60);
+          const s = total % 60;
+          return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function openMicModal() {
+          micModalState('idle');
+          document.getElementById('mic-record-modal').classList.remove('hidden');
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeMicModal() {
+          stopRecording(false);
+          document.getElementById('mic-record-modal').classList.add('hidden');
+          document.body.style.overflow = '';
+        }
+
+        function stopRecording(keepData) {
+          if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            if (!keepData) {
+              mediaRecorder.ondataavailable = null;
+              mediaRecorder.onstop = null;
+            }
+            mediaRecorder.stop();
+          }
+          if (!keepData) {
+            mediaRecorder = null;
+            recordedChunks = [];
+          }
+          if (mediaRecorder && mediaRecorder.stream) {
+            mediaRecorder.stream.getTracks().forEach(t => t.stop());
+          }
+        }
+
+        async function startRecording() {
+          recordedChunks = [];
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err) {
+            alert('Microphone access denied or unavailable.');
+            return;
+          }
+
+          const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : MediaRecorder.isTypeSupported('audio/webm')
+              ? 'audio/webm'
+              : '';
+          mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+          mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+          mediaRecorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop());
+            const duration = pausedElapsed + (pausedAt ? 0 : Date.now() - startTime);
+            document.getElementById('mic-review-duration').textContent = formatDuration(duration);
+            micModalState('review');
+          };
+
+          mediaRecorder.start();
+          startTime = Date.now();
+          micModalState('recording');
+          document.getElementById('mic-pause-btn').textContent = 'Pause';
+          document.getElementById('mic-status-label').textContent = 'Recording in progress…';
+          document.getElementById('mic-ping').classList.remove('hidden');
+          document.getElementById('mic-dot').className = 'w-4 h-4 rounded-full bg-red-500';
+
+          pausedElapsed = 0;
+          pausedAt = null;
+          timerInterval = setInterval(() => {
+            const elapsed = pausedElapsed + (pausedAt ? 0 : Date.now() - startTime);
+            document.getElementById('mic-timer').textContent = formatDuration(elapsed);
+          }, 500);
+        }
+
+        function useRecording() {
+          const blob = new Blob(recordedChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
+          const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const ext = (blob.type.includes('ogg') || blob.type.includes('opus')) ? 'ogg' : 'webm';
+          const file = new File([blob], `recording-${ts}.${ext}`, { type: blob.type });
+
+          const dup = state.batchQueue.some(i => i.file.name === file.name);
+          if (!dup) state.batchQueue.push({ file, jobId: null, recordingId: null, status: 'pending', progress: 0, message: '' });
+
+          state.batchMode = true;
+          document.getElementById('batch-panel').classList.remove('hidden');
+          document.getElementById('file-info').classList.add('hidden');
+          document.getElementById('batch-summary').classList.add('hidden');
+          const startBtn = document.getElementById('start-btn');
+          if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = `Transcribe ${state.batchQueue.length} file${state.batchQueue.length !== 1 ? 's' : ''}`;
+          }
+          renderBatchList();
+
+          mediaRecorder = null;
+          recordedChunks = [];
+          closeMicModal();
+        }
+
+        document.getElementById('record-mic-btn').addEventListener('click', e => { e.stopPropagation(); openMicModal(); });
+        document.getElementById('mic-modal-close').addEventListener('click', closeMicModal);
+        document.getElementById('mic-modal-backdrop').addEventListener('click', closeMicModal);
+        document.getElementById('mic-cancel-idle').addEventListener('click', closeMicModal);
+        document.getElementById('mic-start-btn').addEventListener('click', startRecording);
+        document.getElementById('mic-pause-btn').addEventListener('click', () => {
+          if (!mediaRecorder) return;
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.pause();
+            pausedAt = Date.now();
+            document.getElementById('mic-pause-btn').textContent = 'Resume';
+            document.getElementById('mic-status-label').textContent = 'Paused';
+            document.getElementById('mic-ping').classList.add('hidden');
+            document.getElementById('mic-dot').classList.remove('bg-red-500');
+            document.getElementById('mic-dot').classList.add('bg-slate-400');
+          } else if (mediaRecorder.state === 'paused') {
+            mediaRecorder.resume();
+            pausedElapsed += Date.now() - pausedAt;
+            pausedAt = null;
+            document.getElementById('mic-pause-btn').textContent = 'Pause';
+            document.getElementById('mic-status-label').textContent = 'Recording in progress…';
+            document.getElementById('mic-ping').classList.remove('hidden');
+            document.getElementById('mic-dot').classList.add('bg-red-500');
+            document.getElementById('mic-dot').classList.remove('bg-slate-400');
+          }
+        });
+        document.getElementById('mic-stop-btn').addEventListener('click', () => {
+          if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        });
+        document.getElementById('mic-discard-btn').addEventListener('click', () => {
+          mediaRecorder = null;
+          recordedChunks = [];
+          pausedElapsed = 0;
+          pausedAt = null;
+          micModalState('idle');
+        });
+        document.getElementById('mic-use-btn').addEventListener('click', useRecording);
+
+        document.addEventListener('keydown', (e) => {
+          const modal = document.getElementById('mic-record-modal');
+          if (!modal || modal.classList.contains('hidden')) return;
+          if (e.key === 'Escape') { e.preventDefault(); closeMicModal(); }
+        });
+      })();
+
       // New folder / tag — open dialog
       document.getElementById('new-folder-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -5608,6 +5779,67 @@
             </svg>
             Report an issue on GitHub ↗
           </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mic recording modal -->
+  <div id="mic-record-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-8">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" id="mic-modal-backdrop"></div>
+    <div class="relative bg-white rounded-xl p-5 w-full max-w-sm mx-auto shadow-lg">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-slate-800">Record from Microphone</h3>
+        <button id="mic-modal-close" class="text-slate-400 hover:text-slate-600 p-1 rounded focus:outline-none" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Idle state -->
+      <div id="mic-state-idle" class="flex flex-col items-center gap-4 py-4">
+        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 1a4 4 0 014 4v7a4 4 0 01-8 0V5a4 4 0 014-4z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 10a7 7 0 01-14 0M12 19v4M8 23h8"/>
+          </svg>
+        </div>
+        <p class="text-sm text-slate-500 text-center">Click Start to begin recording from your microphone.</p>
+        <div class="flex gap-2 w-full mt-1">
+          <button id="mic-cancel-idle" class="entity-cancel flex-1" type="button">Cancel</button>
+          <button id="mic-start-btn" class="entity-save flex-1" type="button">Start Recording</button>
+        </div>
+      </div>
+
+      <!-- Recording state -->
+      <div id="mic-state-recording" class="hidden flex flex-col items-center gap-4 py-4">
+        <div class="relative w-16 h-16 rounded-full bg-red-50 flex items-center justify-center">
+          <span id="mic-ping" class="absolute w-12 h-12 rounded-full bg-red-100 animate-ping opacity-60"></span>
+          <span id="mic-dot" class="w-4 h-4 rounded-full bg-red-500"></span>
+        </div>
+        <p id="mic-timer" class="text-2xl font-mono font-semibold text-slate-800 tabular-nums">0:00</p>
+        <p id="mic-status-label" class="text-xs text-slate-400">Recording in progress…</p>
+        <div class="flex gap-2 w-full mt-1">
+          <button id="mic-pause-btn" class="entity-cancel flex-1 border border-slate-200 rounded-full py-3 text-sm font-bold" type="button">Pause</button>
+          <button id="mic-stop-btn" class="entity-save flex-1" style="background:#ef4444;box-shadow:0 14px 30px rgba(239,68,68,0.22);" type="button">Stop</button>
+        </div>
+      </div>
+
+      <!-- Review state -->
+      <div id="mic-state-review" class="hidden flex flex-col items-center gap-4 py-4">
+        <div class="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+        <div class="text-center">
+          <p class="text-sm font-medium text-slate-800">Recording complete</p>
+          <p id="mic-review-duration" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <div class="flex gap-2 w-full mt-1">
+          <button id="mic-discard-btn" class="entity-cancel flex-1" type="button">Discard</button>
+          <button id="mic-use-btn" class="entity-save flex-1" type="button">Use Recording</button>
         </div>
       </div>
     </div>

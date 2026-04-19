@@ -57,6 +57,7 @@ AmicoScript keeps everything local.
 ## 🚀 Features
 
 - 🎧 Transcribe audio and video (MP3, WAV, M4A, OGG, FLAC, AAC, MP4, MOV, MKV)
+- 🎙️ Record directly from your microphone (with pause support)
 - 🔗 Import directly from video URLs (YouTube, TikTok, Instagram, Facebook, X, Vimeo, Twitch)
 - 📚 Batch process multiple files at once
 - 🧠 Whisper models (tiny → large-v3)
@@ -221,7 +222,6 @@ Full documentation (API, setup, details):
 See [docs/ROADMAP.md](docs/ROADMAP.md) for full priority breakdown.
 
 **Currently planned:**
-- Live voice recording
 - Manual speaker identification (rename speakers)
 - AI-powered smart tagging
 - Official website & docs
