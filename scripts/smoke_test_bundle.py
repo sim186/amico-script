@@ -19,13 +19,14 @@ import urllib.request
 from pathlib import Path
 
 
-def _exe_path(repo_root: Path) -> Path:
+def _exe_path(repo_root: Path, gpu: bool = False) -> Path:
+    app_name = "AmicoScript-GPU" if gpu else "AmicoScript"
     system = platform.system().lower()
     if system == "darwin":
         return repo_root / "dist" / "AmicoScript.app" / "Contents" / "MacOS" / "AmicoScript"
     if system == "windows":
-        return repo_root / "dist" / "AmicoScript" / "AmicoScript.exe"
-    return repo_root / "dist" / "AmicoScript" / "AmicoScript"
+        return repo_root / "dist" / app_name / f"{app_name}.exe"
+    return repo_root / "dist" / app_name / app_name
 
 
 def _wait_http(url: str, timeout_seconds: int) -> None:
@@ -43,8 +44,9 @@ def _wait_http(url: str, timeout_seconds: int) -> None:
 
 
 def main() -> int:
+    gpu = '--gpu' in sys.argv
     repo_root = Path(__file__).resolve().parents[1]
-    exe = _exe_path(repo_root)
+    exe = _exe_path(repo_root, gpu=gpu)
     if not exe.exists():
         raise FileNotFoundError(f"Expected executable not found: {exe}")
 
