@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from collections import deque
 import state
+from api.routes.transcription import get_job_logs
 from core.job_helpers import _append_job_log
 
 
@@ -42,3 +43,24 @@ def test_logs_preserve_order():
         _append_job_log(job_id, "INFO", f"msg {i}")
     messages = [e["message"] for e in state.jobs[job_id]["logs"]]
     assert messages == [f"msg {i}" for i in range(5)]
+
+
+def test_get_job_logs_handles_deque():
+    job_id = "test-deque-api"
+    state.jobs[job_id] = {
+        "id": job_id,
+        "status": "done",
+        "progress": 1.0,
+        "message": "Complete",
+        "logs": deque(
+            [
+                {"ts": 1.0, "level": "INFO", "message": "msg 1"},
+                {"ts": 2.0, "level": "INFO", "message": "msg 2"},
+            ],
+            maxlen=1000,
+        ),
+    }
+
+    result = get_job_logs(job_id, limit=1)
+
+    assert result["logs"] == [{"ts": 2.0, "level": "INFO", "message": "msg 2"}]

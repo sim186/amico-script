@@ -423,6 +423,8 @@ def get_job_logs(job_id: str, limit: int = 300) -> dict:
     job = _get_job(job_id)
     safe_limit = max(1, min(limit, 1000))
     logs = job.get("logs", [])
+    if not isinstance(logs, list):
+        logs = list(logs)
     return {
         "status": job.get("status"),
         "progress": job.get("progress"),
