@@ -7,6 +7,10 @@ Keep a Changelog format.
 ## [Unreleased]
 
 
+
+## [1.10.5] - 2026-05-05
+- Fix torch/torchaudio dependency caps for Python 3.13 and lightning compatibility
+
 ## [1.10.4] - 2026-04-30
 - Error in transcription.py #22 (thanks for @nyfon for reporting it)
 
